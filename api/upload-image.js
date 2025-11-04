@@ -1,7 +1,7 @@
 import { formidable } from 'formidable';
 import fs from 'fs';
 import FormData from 'form-data';
-import fetch from 'node-fetch'; // Required for making form-data requests in Node.js
+import fetch from 'node-fetch';
 
 export const config = {
   api: {
