@@ -1,7 +1,6 @@
 
-
 import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback, useRef } from 'react';
-import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage } from '../types';
+import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
 
 interface AppState {
@@ -85,10 +84,7 @@ const AppContext = createContext<{
 });
 
 const appReducer = (state: AppState, action: Action): AppState => {
-    // This reducer handles "optimistic updates" - UI changes happen instantly.
-    // The actual saving happens in the background via the saveStateToCloud function.
-    // All reducer cases should be here as implemented before.
-     switch (action.type) {
+    switch (action.type) {
         case 'LOGIN': {
             const user = state.users.find(
                 (u) => u.login.toLowerCase() === action.payload.login.toLowerCase() && u.password === action.payload.password
@@ -102,7 +98,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         case 'LOGOUT': {
             if (state.currentUser) {
                 const newPresence = { ...state.presence, [state.currentUser.id]: Date.now() };
-                // Reset state but keep users, units, etc. that were loaded from cloud
                 const { currentUser, ...persistedState } = initialState;
                 return { ...persistedState, ...state, currentUser: null, presence: newPresence, isLoading: false };
             }
@@ -114,8 +109,16 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, ...action.payload, isLoading: false };
         case 'SET_ERROR':
             return { ...state, error: action.payload, isLoading: false };
-        // Other cases update the state optimistically
-        // Example:
+        
+        case 'SUBMIT_ROUND_TEST': {
+            const { studentId, unitId, roundId, result } = action.payload;
+            const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
+            if (!newProgress[studentId]) newProgress[studentId] = {};
+            if (!newProgress[studentId][unitId]) newProgress[studentId][unitId] = { unitId, rounds: {} };
+            newProgress[studentId][unitId].rounds[roundId] = { ...result, roundId, completed: true };
+            return { ...state, studentProgress: newProgress };
+        }
+
         case 'SET_UNIT_GRADE': {
             const { studentId, unitId, grade, comment } = action.payload;
             const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
@@ -125,7 +128,155 @@ const appReducer = (state: AppState, action: Action): AppState => {
             newProgress[studentId][unitId].comment = comment;
             return { ...state, studentProgress: newProgress };
         }
-        // ... include ALL other cases here
+        
+        case 'DELETE_UNIT_GRADE': {
+          const { studentId, unitId } = action.payload;
+          const studentProgress = state.studentProgress[studentId];
+          if (!studentProgress || !studentProgress[unitId]) return state;
+
+          const { grade, comment, ...restOfUnitProgress } = studentProgress[unitId];
+
+          return {
+            ...state,
+            studentProgress: {
+              ...state.studentProgress,
+              [studentId]: {
+                ...state.studentProgress[studentId],
+                [unitId]: restOfUnitProgress as StudentUnitProgress,
+              },
+            },
+          };
+        }
+
+        case 'SAVE_OFFLINE_TEST': {
+          const newResult: OfflineTestResult = {
+            ...action.payload,
+            id: `offline-${Date.now()}`,
+            timestamp: Date.now(),
+          };
+          const studentResults = state.offlineTestResults[action.payload.studentId] || [];
+          return {
+            ...state,
+            offlineTestResults: {
+              ...state.offlineTestResults,
+              [action.payload.studentId]: [...studentResults, newResult],
+            },
+          };
+        }
+
+        case 'UPDATE_OFFLINE_TEST': {
+            const { studentId } = action.payload;
+            return {
+                ...state,
+                offlineTestResults: {
+                    ...state.offlineTestResults,
+                    [studentId]: (state.offlineTestResults[studentId] || []).map(r => r.id === action.payload.id ? action.payload : r)
+                }
+            };
+        }
+
+        case 'DELETE_OFFLINE_TEST_GRADE': {
+            const { studentId, resultId } = action.payload;
+            const studentResults = state.offlineTestResults[studentId];
+            if (!studentResults) return state;
+
+            return {
+                ...state,
+                offlineTestResults: {
+                    ...state.offlineTestResults,
+                    [studentId]: studentResults.map(r => {
+                        if (r.id === resultId) {
+                            const { grade, comment, status, ...rest } = r;
+                            return rest as OfflineTestResult;
+                        }
+                        return r;
+                    })
+                }
+            };
+        }
+
+        case 'DELETE_ONLINE_TEST_GRADE': {
+            const { studentId, resultId } = action.payload;
+            const studentResults = state.onlineTestResults[studentId];
+            if (!studentResults) return state;
+
+            return {
+                ...state,
+                onlineTestResults: {
+                    ...state.onlineTestResults,
+                    [studentId]: studentResults.map(r => {
+                        if (r.id === resultId) {
+                            const { grade, comment, status, ...rest } = r;
+                            return rest as OnlineTestResult;
+                        }
+                        return r;
+                    })
+                }
+            };
+        }
+
+        case 'GRADE_ONLINE_TEST': {
+            const { studentId, resultId, grade, status, comment } = action.payload;
+            const studentResults = state.onlineTestResults[studentId];
+            if (!studentResults) return state;
+            
+            return {
+                ...state,
+                onlineTestResults: {
+                    ...state.onlineTestResults,
+                    [studentId]: studentResults.map(r => r.id === resultId ? {...r, grade, status, comment} : r)
+                }
+            };
+        }
+        
+        case 'CLOSE_ONLINE_TEST_SESSION': {
+            if (!state.activeOnlineTestSession) return state;
+             const session = state.activeOnlineTestSession;
+             const test = state.onlineTests.find(t => t.id === session.testId);
+             const newResults = { ...state.onlineTestResults };
+
+            Object.values(session.students).forEach(student => {
+                 if (!newResults[student.studentId]) {
+                    newResults[student.studentId] = [];
+                 }
+                 const score = test ? Math.round((student.answers.filter(a => a.correct).length / test.words.length) * 100) : 0;
+                 const timeTaken = student.timeFinished && session.startTime ? (student.timeFinished - session.startTime) / 1000 : (test?.durationMinutes || 0) * 60;
+                 
+                 const existingResult = newResults[student.studentId].find(r => r.id === session.id + student.studentId);
+                 if (!existingResult) {
+                     newResults[student.studentId].push({
+                        id: session.id + student.studentId, // Unique ID for this attempt
+                        studentId: student.studentId,
+                        testId: session.testId,
+                        score,
+                        answers: student.answers,
+                        timeTaken,
+                        timestamp: Date.now()
+                     });
+                 }
+             });
+
+            return { ...state, activeOnlineTestSession: null, onlineTestResults: newResults };
+        }
+        
+        case 'ADD_UNIT': {
+            const { unitName, isMistakeUnit, sourceTestId, sourceTestName } = action.payload;
+            const newUnit: Unit = {
+                id: `unit-${Date.now()}`,
+                name: unitName,
+                rounds: [],
+                isMistakeUnit,
+                sourceTestId,
+                sourceTestName,
+            };
+            return { ...state, units: [...state.units, newUnit] };
+        }
+        
+        case 'DELETE_UNIT': {
+            return { ...state, units: state.units.filter(u => u.id !== action.payload.unitId) };
+        }
+
+        // Add all other cases
         default:
             return state;
     }
@@ -134,18 +285,15 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
-    // FIX: The useRef hook requires an initial value when a generic type is provided.
-    // Changed to initialize with null to fix the "Expected 1 arguments, but got 0" error.
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // This function now sends the entire state to our secure proxy.
     const saveStateToCloud = useCallback((currentState: AppState) => {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
         debounceTimer.current = setTimeout(() => {
             const { currentUser, error, isLoading, ...stateToSave } = currentState;
 
-            fetch('/api/data', { // Using the Vercel proxy endpoint
+            fetch('/api/data', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(stateToSave),
@@ -156,12 +304,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }, 1000);
     }, []);
 
-    // Effect to load data on initial app start
     useEffect(() => {
         const loadStateFromCloud = async () => {
             dispatch({ type: 'SET_LOADING', payload: true });
             try {
-                const res = await fetch('/api/data'); // Use proxy
+                const res = await fetch('/api/data');
 
                 if (res.status === 404) {
                     console.log("Bin not found. Initializing with default data.");
@@ -188,7 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                      const mergedState = {
                         ...initialState,
                         ...cloudState,
-                        users: USERS,
+                        users: USERS, // Always use fresh users from constants
                         units: [...(cloudState.units || []), ...UNITS.filter(u => !cloudState.units?.some((cu: Unit) => cu.id === u.id))],
                         onlineTests: [...(cloudState.onlineTests || []), ...ONLINE_TESTS.filter(t => !cloudState.onlineTests?.some((ct: OnlineTest) => ct.id === t.id))],
                     };
@@ -201,15 +348,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     errorMessage = 'Ошибка конфигурации сервера. Проверьте переменные окружения (ключи API) в настройках Vercel.';
                 }
                 dispatch({ type: 'SET_ERROR', payload: errorMessage });
-                // Fallback to local constants if cloud fails
                 dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS } });
             }
         };
 
         loadStateFromCloud();
-    }, [saveStateToCloud]); // Dependency added to satisfy hook rules, but logic prevents re-running.
+    }, [saveStateToCloud]);
 
-    // This effect listens for any state changes (except loading/error states) and triggers the save function.
     useEffect(() => {
         if (!state.isLoading && state.currentUser) {
             saveStateToCloud(state);
