@@ -5,11 +5,13 @@ import { LogoIcon } from './common/Icons';
 
 const LoginScreen: React.FC = () => {
   const { state, dispatch } = useAppContext();
+  const { isLoading, error } = state;
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
     dispatch({ type: 'LOGIN', payload: { login, password } });
   };
 
@@ -23,41 +25,50 @@ const LoginScreen: React.FC = () => {
             <p className="text-slate-500">Войдите в свой аккаунт EnglishCourse</p>
           </div>
           
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="login" className="block text-sm font-medium text-slate-700">Логин</label>
-              <input
-                id="login"
-                type="text"
-                value={login}
-                onChange={(e) => setLogin(e.target.value)}
-                className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                placeholder="Vladislav"
-                required
-              />
+          {isLoading ? (
+            <div className="text-center text-slate-500">
+                <p>Загрузка данных...</p>
             </div>
-            <div>
-              <label htmlFor="password"  className="block text-sm font-medium text-slate-700">Пароль</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            {state.error && <p className="text-red-500 text-sm text-center">{state.error}</p>}
-            <div>
-              <button
-                type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105"
-              >
-                Войти
-              </button>
-            </div>
-          </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="login" className="block text-sm font-medium text-slate-700">Логин</label>
+                <input
+                  id="login"
+                  type="text"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                  className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                  placeholder="Vladislav"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <div>
+                <label htmlFor="password"  className="block text-sm font-medium text-slate-700">Пароль</label>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="mt-1 block w-full px-4 py-2 border border-slate-300 rounded-lg shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                  placeholder="••••••••"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              {error && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</p>}
+              <div>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105 disabled:bg-slate-400 disabled:scale-100"
+                >
+                  {isLoading ? 'Загрузка...' : 'Войти'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>
