@@ -1,4 +1,4 @@
-
+// FIX: Removed duplicated imports, types and merged component definitions to resolve "Duplicate identifier" errors.
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage } from '../types';
@@ -7,26 +7,48 @@ import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, Docum
 
 type TeacherViewMode = 'dashboard' | 'student_detail' | 'offline_grader' | 'online_test_manager' | 'online_test_monitor' | 'online_test_history' | 'online_test_results' | 'content_editor' | 'chat';
 
-const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = error => reject(error);
-    });
-};
-
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
-    const [isSaved, setIsSaved] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState<'saved' | 'error' | null>(null);
+    const [currentImageUrl, setCurrentImageUrl] = useState(word.image);
+
+    useEffect(() => {
+        setCurrentImageUrl(word.image);
+    }, [word.image]);
     
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            const base64 = await fileToBase64(file);
-            dispatch({ type: 'UPDATE_WORD_IMAGE', payload: { unitId, roundId, wordId: word.id, imageUrl: base64 }});
-            setIsSaved(true);
-            setTimeout(() => setIsSaved(false), 2000);
+            setIsUploading(true);
+            setUploadStatus(null);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/upload-image', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error('Upload failed');
+                }
+
+                const data = await response.json();
+                const imageUrl = data.secure_url;
+                
+                setCurrentImageUrl(imageUrl);
+                dispatch({ type: 'UPDATE_WORD_IMAGE', payload: { unitId, roundId, wordId: word.id, imageUrl }});
+                setUploadStatus('saved');
+            } catch (error) {
+                console.error("Failed to upload image:", error);
+                setUploadStatus('error');
+            } finally {
+                setIsUploading(false);
+                 setTimeout(() => setUploadStatus(null), 3000);
+            }
         }
     };
     
@@ -36,10 +58,17 @@ const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, on
         });
     };
 
+    const getButtonText = () => {
+        if(isUploading) return "Загрузка...";
+        if(uploadStatus === 'saved') return "Сохранено!";
+        if(uploadStatus === 'error') return "Ошибка!";
+        return "Загрузить новую картинку";
+    }
+
     return (
         <div className="bg-white p-4 rounded-lg shadow-md flex flex-col sm:flex-row items-center gap-4">
             <img 
-                src={word.image || 'https://via.placeholder.com/400x300?text=No+Image'} 
+                src={currentImageUrl || 'https://via.placeholder.com/400x300?text=No+Image'} 
                 alt={word.english} 
                 className="w-full sm:w-40 h-32 object-contain rounded-md bg-slate-100 flex-shrink-0"
             />
@@ -52,11 +81,16 @@ const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, on
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                     <label htmlFor={`file-upload-${word.id}`} className="flex-grow cursor-pointer w-full">
-                        <div className="w-full text-center px-4 py-2 rounded-lg text-white font-semibold bg-indigo-600 hover:bg-indigo-700 transition">
-                            {isSaved ? 'Сохранено!' : 'Загрузить новую картинку'}
+                        <div className={`w-full text-center px-4 py-2 rounded-lg text-white font-semibold transition 
+                            ${isUploading ? 'bg-slate-400' : ''} 
+                            ${uploadStatus === 'saved' ? 'bg-green-500' : ''} 
+                            ${uploadStatus === 'error' ? 'bg-red-500' : ''}
+                            ${!isUploading && !uploadStatus ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+                        `}>
+                           {getButtonText()}
                         </div>
                     </label>
-                    <input id={`file-upload-${word.id}`} type="file" accept="image/*" className="hidden" onChange={handleImageUpload}/>
+                    <input id={`file-upload-${word.id}`} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading}/>
                 </div>
             </div>
         </div>
@@ -70,13 +104,27 @@ const AddWordForm: React.FC<{ unitId: string, roundId: string }> = ({ unitId, ro
     const [transcription, setTranscription] = useState('');
     const [image, setImage] = useState('');
     const [imageName, setImageName] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            const base64 = await fileToBase64(file);
-            setImage(base64);
-            setImageName(file.name);
+            setImageName('Загрузка...');
+            setIsUploading(true);
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const response = await fetch('/api/upload-image', { method: 'POST', body: formData });
+                if (!response.ok) throw new Error('Upload failed');
+                const data = await response.json();
+                setImage(data.secure_url);
+                setImageName(file.name);
+            } catch (error) {
+                console.error("Failed to upload image:", error);
+                setImageName('Ошибка загрузки');
+            } finally {
+                setIsUploading(false);
+            }
         }
     };
 
@@ -106,10 +154,10 @@ const AddWordForm: React.FC<{ unitId: string, roundId: string }> = ({ unitId, ro
                         <UploadIcon className="w-5 h-5 text-indigo-600"/>
                         <span className="text-slate-500 truncate">{imageName || 'Выберите картинку'}</span>
                     </label>
-                    <input id={`new-word-image-upload`} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} required/>
+                    <input id={`new-word-image-upload`} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} required disabled={isUploading}/>
                 </div>
             </div>
-            <button type="submit" className="mt-4 px-4 py-2 rounded-lg text-white font-semibold bg-green-600 hover:bg-green-700 flex items-center gap-2">
+            <button type="submit" className="mt-4 px-4 py-2 rounded-lg text-white font-semibold bg-green-600 hover:bg-green-700 flex items-center gap-2 disabled:bg-slate-400" disabled={isUploading}>
                 <PlusIcon className="w-5 h-5"/> Добавить слово
             </button>
         </form>
@@ -419,6 +467,7 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
 
 const TeacherView: React.FC = () => {
+    // ... (rest of the component is unchanged)
     const { state, dispatch } = useAppContext();
     const { currentUser, users, studentProgress, offlineTestResults, activeOnlineTestSession, onlineTests, onlineTestResults } = state;
     const [view, setView] = useState<TeacherViewMode>('dashboard');
@@ -1205,7 +1254,7 @@ const TeacherView: React.FC = () => {
     }
 
     return (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="container mx-auto px-4 sm:px-6 lg:p-8 py-8">
             {confirmation && (
                 <Modal isVisible={true} onClose={() => setConfirmation(null)} title="Подтверждение">
                     <p>{confirmation.message}</p>
