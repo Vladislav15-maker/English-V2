@@ -1,14 +1,4 @@
 
-// Global type definition for import.meta.env to satisfy TypeScript in all environments.
-declare global {
-  interface ImportMeta {
-    readonly env: {
-      readonly VITE_JSONBIN_BIN_ID: string;
-      readonly VITE_JSONBIN_API_KEY: string;
-    }
-  }
-}
-
 import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback } from 'react';
 import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
@@ -34,9 +24,9 @@ interface AppState {
 }
 
 const initialState: AppState = {
-  users: USERS, // Start with default users locally
-  units: UNITS, // and default units
-  onlineTests: ONLINE_TESTS,
+  users: [], // Start with empty users, load from cloud
+  units: [], // Start with empty units, load from cloud
+  onlineTests: [],
   currentUser: null,
   studentProgress: {},
   offlineTestResults: {},
@@ -114,7 +104,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'LOGOUT': {
       if(state.currentUser) {
         const newPresence = { ...state.presence, [state.currentUser.id]: Date.now() };
-        // We will let the useEffect save the final state on change.
         return { ...initialState, users: state.users, units: state.units, onlineTests: state.onlineTests, currentUser: null, presence: newPresence, isLoading: false, error: state.error };
       }
       return { ...state, currentUser: null };
@@ -136,55 +125,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [state, dispatch] = useReducer(appReducer, initialState);
 
   const saveStateToCloud = useCallback((currentState: AppState) => {
-    const BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID;
-    const API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
-
-    if (!API_KEY || !BIN_ID) return;
-
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
+        // Exclude properties that shouldn't be persisted
         const { currentUser, error, isLoading, ...stateToSave } = currentState;
 
-        fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+        fetch(`/api/data`, { // Use the proxy endpoint
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': API_KEY,
-                'X-Bin-Versioning': 'false'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(stateToSave),
-        }).catch(error => console.error("Failed to save state to cloud:", error));
-    }, 500);
+        }).catch(error => {
+            console.error("Failed to save state via proxy:", error);
+            dispatch({ type: 'SET_ERROR', payload: "Ошибка сохранения данных." });
+        });
+    }, 1000); // Debounce saving
   }, []);
   
   useEffect(() => {
-    const BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID;
-    const API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
-
-    if (!API_KEY || !BIN_ID) {
-        console.warn("JSONBin environment variables are missing. App will run in local mode.");
-        dispatch({ type: 'SET_ERROR', payload: 'Не удалось подключиться к облаку. Используются локальные данные.' });
-        dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS } });
-        return;
-    }
-
     const loadStateFromCloud = async () => {
         try {
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers: { 'X-Master-Key': API_KEY } });
+            // Fetch data from our own proxy endpoint
+            const res = await fetch(`/api/data`);
             
+            // Handle case where the bin is not found (e.g., first run)
             if (res.status === 404) {
-                console.log("JSONBin is empty. Initializing with default data.");
-                const defaultState = { ...initialState, users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, isLoading: false };
+                console.log("Bin not found. Initializing with default data.");
+                const defaultState = { 
+                    ...initialState, 
+                    users: USERS, 
+                    units: UNITS, 
+                    onlineTests: ONLINE_TESTS, 
+                    isLoading: false 
+                };
                 dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
-                saveStateToCloud(defaultState); // Immediately save the initial state.
+                saveStateToCloud(defaultState); // Immediately save the initial state to create the bin.
                 return;
             }
 
-            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+            }
             
             const data = await res.json();
             const cloudState = data.record;
 
+            // If bin is empty or invalid, initialize it
             if (!cloudState || !cloudState.users || cloudState.users.length === 0) {
                  console.log("Cloud data is empty/invalid. Initializing with default data.");
                  const defaultState = { ...initialState, users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, isLoading: false };
@@ -193,10 +179,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                  return;
             }
             
+            // Merge cloud state with local constants to ensure updates
             const mergedState = {
                 ...initialState,
                 ...cloudState,
-                users: USERS,
+                users: USERS, // Always use fresh user list from constants
                 units: [...(cloudState.units || []), ...UNITS.filter(u => !cloudState.units?.some((cu: Unit) => cu.id === u.id))],
                 onlineTests: [...(cloudState.onlineTests || []), ...ONLINE_TESTS.filter(t => !cloudState.onlineTests?.some((ct: OnlineTest) => ct.id === t.id))],
             };
@@ -204,7 +191,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         } catch (error) {
             console.error("Failed to load state from cloud:", error);
-            dispatch({ type: 'SET_ERROR', payload: 'Не удалось загрузить данные. Используются локальные данные.' });
+            const errorMessage = (error as Error).message.includes('Server configuration error')
+              ? 'Ошибка конфигурации сервера: проверьте ключи API в настройках Vercel.'
+              : 'Не удалось загрузить данные. Используются локальные данные.';
+            dispatch({ type: 'SET_ERROR', payload: errorMessage });
+            // Fallback to local constants if cloud fails
             dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, isLoading: false } });
         }
     };
@@ -212,7 +203,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadStateFromCloud();
   }, [saveStateToCloud]);
 
+  // This effect listens for any state changes and triggers the save function.
   useEffect(() => {
+    // We don't save on the initial load, only on subsequent changes.
     if (!state.isLoading) {
         saveStateToCloud(state);
     }
