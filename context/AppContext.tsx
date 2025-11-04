@@ -83,6 +83,8 @@ const AppContext = createContext<{
   dispatch: () => null,
 });
 
+// The appReducer remains the same as it correctly handles state mutations.
+// The primary fix is in the AppProvider's data persistence logic.
 const appReducer = (state: AppState, action: Action): AppState => {
     switch (action.type) {
         case 'LOGIN': {
@@ -317,18 +319,26 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
         
         case 'UPDATE_WORD_IMAGE': {
-            console.log('Reducer: Handling UPDATE_WORD_IMAGE', action.payload); // DEBUG
+            console.log('Reducer: Handling UPDATE_WORD_IMAGE', action.payload);
             const { unitId, roundId, wordId, imageUrl } = action.payload;
-            return {
-                ...state,
-                units: state.units.map(u => u.id === unitId ? {
-                    ...u,
-                    rounds: u.rounds.map(r => r.id === roundId ? {
-                        ...r,
-                        words: r.words.map(w => w.id === wordId ? { ...w, image: imageUrl } : w)
-                    } : r)
-                } : u)
-            };
+            const newUnits = state.units.map(u => {
+                if (u.id === unitId) {
+                    return {
+                        ...u,
+                        rounds: u.rounds.map(r => {
+                            if (r.id === roundId) {
+                                return {
+                                    ...r,
+                                    words: r.words.map(w => w.id === wordId ? { ...w, image: imageUrl } : w)
+                                };
+                            }
+                            return r;
+                        })
+                    };
+                }
+                return u;
+            });
+            return { ...state, units: newUnits };
         }
 
         case 'CREATE_CHAT': {
@@ -399,15 +409,40 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
+    
+    // This ref will always hold the latest state, solving the stale state issue in the debounced save function.
+    const latestState = useRef(state);
+    useEffect(() => {
+        latestState.current = state;
+    }, [state]);
+
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const saveStateToCloud = useCallback((currentState: AppState) => {
-        if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        console.log('Scheduling a save to the cloud...'); // DEBUG
+    // This useCallback is stable and will not be recreated on re-renders.
+    const saveStateToCloud = useCallback(() => {
+        // Clear any previously scheduled save.
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
+        }
 
+        // Don't save if no one is logged in.
+        if (!latestState.current.currentUser) {
+            return;
+        }
+
+        console.log('Scheduling a save to the cloud...');
+
+        // Schedule a new save.
         debounceTimer.current = setTimeout(() => {
-            console.log('Executing save to the cloud.'); // DEBUG
-            const { currentUser, error, isLoading, ...stateToSave } = currentState;
+            console.log('Executing save to the cloud with the latest state.');
+            
+            // We use the ref here to get the most up-to-date state.
+            const stateToSave = { ...latestState.current };
+            
+            // Exclude transient state properties that shouldn't be saved.
+            delete (stateToSave as Partial<AppState>).currentUser;
+            delete (stateToSave as Partial<AppState>).error;
+            delete (stateToSave as Partial<AppState>).isLoading;
 
             fetch('/api/data', {
                 method: 'PUT',
@@ -415,11 +450,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 body: JSON.stringify(stateToSave),
             }).catch(error => {
                 console.error("Failed to save state to cloud:", error);
+                // Dispatch is stable, so we can call it here.
                 dispatch({ type: 'SET_ERROR', payload: "Ошибка сохранения: не удалось подключиться к серверу." });
             });
-        }, 1000);
-    }, []);
+        }, 1500); // 1.5 second debounce delay to batch rapid changes.
+    }, []); // Empty dependency array ensures this function is created only once.
 
+    // This effect runs only once on mount to load the initial data.
     useEffect(() => {
         const loadStateFromCloud = async () => {
             dispatch({ type: 'SET_LOADING', payload: true });
@@ -430,7 +467,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     console.log("Bin not found. Initializing with default data.");
                     const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
-                    saveStateToCloud({ ...initialState, ...defaultState });
+                    saveStateToCloud(); // Save the initial state to the cloud.
                     return;
                 }
 
@@ -446,25 +483,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     console.log("Cloud data is empty/invalid. Initializing...");
                     const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [] };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
-                    saveStateToCloud({ ...initialState, ...defaultState });
+                    saveStateToCloud();
                 } else {
                      const finalUnits: Unit[] = [...UNITS];
                      if(cloudState.units && Array.isArray(cloudState.units)) {
                          cloudState.units.forEach((cloudUnit: Unit) => {
                              const index = finalUnits.findIndex(u => u.id === cloudUnit.id);
                              if (index !== -1) {
-                                 finalUnits[index] = cloudUnit; // Overwrite default with saved
+                                 finalUnits[index] = cloudUnit;
                              } else {
-                                 finalUnits.push(cloudUnit); // Add custom unit
+                                 finalUnits.push(cloudUnit);
                              }
                          });
                      }
                     const mergedState = {
                         ...initialState,
                         ...cloudState,
-                        users: USERS,
+                        users: USERS, // Always use fresh users from constants
                         units: finalUnits,
-                        onlineTests: ONLINE_TESTS,
+                        onlineTests: ONLINE_TESTS, // Always use fresh tests from constants
                     };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: mergedState });
                 }
@@ -475,16 +512,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     errorMessage = 'Ошибка конфигурации сервера. Проверьте переменные окружения (ключи API) в настройках Vercel.';
                 }
                 dispatch({ type: 'SET_ERROR', payload: errorMessage });
+                // Fallback to local constants if cloud fails
                 dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS } });
             }
         };
 
         loadStateFromCloud();
-    }, [saveStateToCloud]);
+    }, [saveStateToCloud]); // saveStateToCloud is stable, so this only runs once.
 
+    // This effect triggers the save function whenever the state changes.
     useEffect(() => {
         if (!state.isLoading && state.currentUser) {
-            saveStateToCloud(state);
+            saveStateToCloud();
         }
     }, [state, saveStateToCloud]);
 
