@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage } from '../types';
@@ -91,7 +92,11 @@ const LearnStage: React.FC<{ round: Round; onNext: () => void }> = ({ round, onN
                 {round.words.map(word => (
                      <div key={word.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
                         <div className="w-full h-40 bg-slate-100 flex items-center justify-center">
-                            <img src={word.image} alt={word.english} className="w-full h-full object-contain" />
+                            {word.image ? (
+                                <img src={word.image} alt={word.english} className="w-full h-full object-contain" />
+                            ) : (
+                                <span className="text-slate-400">Image Missing</span>
+                            )}
                         </div>
                         <div className="p-4 flex items-center justify-between">
                             <div>
@@ -174,7 +179,11 @@ const WriteStage: React.FC<{ round: Round; onComplete: (result: StageResult) => 
     return (
         <div className="bg-white rounded-xl shadow-2xl p-8 text-center animate-fade-in w-full">
             <p className="text-sm text-slate-500">Вопрос {currentIndex + 1} / {round.words.length}</p>
-            <img src={currentWord.image} alt={currentWord.english} className="w-full max-h-56 object-contain rounded-lg my-4" />
+            {currentWord.image ? (
+                <img src={currentWord.image} alt={currentWord.english} className="w-full max-h-56 object-contain rounded-lg my-4" />
+            ) : (
+                <div className="w-full h-56 bg-slate-100 flex items-center justify-center rounded-lg my-4 text-slate-400">Image Missing</div>
+            )}
             <h3 className="text-2xl font-bold mb-4">{currentWord.russian}</h3>
             <SecureInput
                 value={inputValue}
@@ -249,13 +258,19 @@ const ChoiceStage: React.FC<{
         <div className="bg-white rounded-xl shadow-2xl p-8 text-center animate-fade-in w-full">
             <p className="text-sm text-slate-500">Вопрос {currentIndex + 1} / {round.words.length}</p>
             <h3 className="text-3xl font-bold my-4">{currentWord.english}</h3>
-            {stageType === 'CHOICE_TEXT' && <img src={currentWord.image} alt="word hint" className="w-full h-40 object-contain bg-slate-100 rounded-lg mb-4"/>}
+            {stageType === 'CHOICE_TEXT' && (
+                currentWord.image ? 
+                <img src={currentWord.image} alt="word hint" className="w-full h-40 object-contain bg-slate-100 rounded-lg mb-4"/>
+                : <div className="w-full h-40 bg-slate-100 flex items-center justify-center rounded-lg mb-4 text-slate-400">Image Missing</div>
+            )}
             <div className={`grid ${stageType === 'CHOICE_TEXT' ? 'grid-cols-1' : 'grid-cols-2'} gap-4 mt-4`}>
                 {options.map((option, idx) => {
                     let buttonClass = "p-4 rounded-lg border-2 transition text-center font-semibold ";
                     if(stageType === 'CHOICE_IMAGE') buttonClass += " h-32 flex items-center justify-center";
 
-                    if (feedback && option === (stageType === 'CHOICE_TEXT' ? currentWord.russian : currentWord.image)) {
+                    const correctValue = stageType === 'CHOICE_TEXT' ? currentWord.russian : currentWord.image;
+
+                    if (feedback && option === correctValue) {
                         buttonClass += " bg-green-100 border-green-500";
                     } else if (feedback && option === feedback.selected) {
                         buttonClass += " bg-red-100 border-red-500";
@@ -269,7 +284,10 @@ const ChoiceStage: React.FC<{
                         </button>
                     ) : (
                         <button key={idx} onClick={() => handleSelect(option)} disabled={!!feedback} className={buttonClass}>
-                            <img src={option} alt="option" className="max-h-full max-w-full object-contain"/>
+                            {option ? 
+                                <img src={option} alt="option" className="max-h-full max-w-full object-contain"/>
+                                : <span className="text-slate-400">Image Missing</span>
+                            }
                         </button>
                     )
                 })}

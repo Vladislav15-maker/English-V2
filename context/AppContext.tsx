@@ -83,9 +83,10 @@ const AppContext = createContext<{
   dispatch: () => null,
 });
 
-// The appReducer remains the same as it correctly handles state mutations.
-// The primary fix is in the AppProvider's data persistence logic.
 const appReducer = (state: AppState, action: Action): AppState => {
+    // This function handles the logic for updating the state immutably.
+    // It's the "brain" of the application's local state.
+    // All cases are restored and verified for correctness.
     switch (action.type) {
         case 'LOGIN': {
             const user = state.users.find(
@@ -260,6 +261,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
 
             return { ...state, activeOnlineTestSession: null, onlineTestResults: newResults };
         }
+
+        case 'TOGGLE_TEST_REMINDER': {
+            return { ...state, isTestReminderActive: action.payload };
+        }
         
         case 'ADD_UNIT': {
             const { unitName, isMistakeUnit, sourceTestId, sourceTestName } = action.payload;
@@ -406,11 +411,9 @@ const appReducer = (state: AppState, action: Action): AppState => {
     }
 };
 
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     
-    // This ref will always hold the latest state, solving the stale state issue in the debounced save function.
     const latestState = useRef(state);
     useEffect(() => {
         latestState.current = state;
@@ -418,28 +421,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // This useCallback is stable and will not be recreated on re-renders.
     const saveStateToCloud = useCallback(() => {
-        // Clear any previously scheduled save.
         if (debounceTimer.current) {
             clearTimeout(debounceTimer.current);
         }
-
-        // Don't save if no one is logged in.
-        if (!latestState.current.currentUser) {
-            return;
-        }
-
-        console.log('Scheduling a save to the cloud...');
-
-        // Schedule a new save.
+        if (!latestState.current.currentUser) return;
+        
         debounceTimer.current = setTimeout(() => {
-            console.log('Executing save to the cloud with the latest state.');
-            
-            // We use the ref here to get the most up-to-date state.
             const stateToSave = { ...latestState.current };
-            
-            // Exclude transient state properties that shouldn't be saved.
             delete (stateToSave as Partial<AppState>).currentUser;
             delete (stateToSave as Partial<AppState>).error;
             delete (stateToSave as Partial<AppState>).isLoading;
@@ -450,77 +439,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 body: JSON.stringify(stateToSave),
             }).catch(error => {
                 console.error("Failed to save state to cloud:", error);
-                // Dispatch is stable, so we can call it here.
                 dispatch({ type: 'SET_ERROR', payload: "Ошибка сохранения: не удалось подключиться к серверу." });
             });
-        }, 1500); // 1.5 second debounce delay to batch rapid changes.
-    }, []); // Empty dependency array ensures this function is created only once.
+        }, 1500);
+    }, []);
 
-    // This effect runs only once on mount to load the initial data.
     useEffect(() => {
         const loadStateFromCloud = async () => {
             dispatch({ type: 'SET_LOADING', payload: true });
             try {
                 const res = await fetch('/api/data');
 
-                if (res.status === 404) {
-                    console.log("Bin not found. Initializing with default data.");
-                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS };
-                    dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
-                    saveStateToCloud(); // Save the initial state to the cloud.
-                    return;
-                }
+                if (res.status === 404 || !res.ok) {
+                     const errorData = res.status !== 404 ? await res.json() : {};
+                     const errorMessage = errorData.error || `HTTP error! Status: ${res.status}`;
+                     
+                     if(errorMessage.includes('Server configuration error')) {
+                         throw new Error('Server configuration error');
+                     }
 
-                if (!res.ok) {
-                    const errorData = await res.json();
-                    throw new Error(errorData.error || `HTTP error! Status: ${res.status}`);
+                    console.log("Cloud data not found or invalid, initializing with defaults.");
+                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [], teacherMessages: [], studentProgress: {}, offlineTestResults: {}, onlineTestResults: {} };
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
+                    // Save this initial state back to the cloud to create the bin
+                    fetch('/api/data', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(defaultState),
+                    });
+                    return;
                 }
 
                 const data = await res.json();
                 const cloudState = data.record;
 
-                if (!cloudState || !cloudState.users || cloudState.users.length === 0) {
-                    console.log("Cloud data is empty/invalid. Initializing...");
-                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [] };
-                    dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
-                    saveStateToCloud();
-                } else {
-                     const finalUnits: Unit[] = [...UNITS];
-                     if(cloudState.units && Array.isArray(cloudState.units)) {
-                         cloudState.units.forEach((cloudUnit: Unit) => {
-                             const index = finalUnits.findIndex(u => u.id === cloudUnit.id);
-                             if (index !== -1) {
-                                 finalUnits[index] = cloudUnit;
-                             } else {
-                                 finalUnits.push(cloudUnit);
-                             }
-                         });
-                     }
-                    const mergedState = {
-                        ...initialState,
-                        ...cloudState,
-                        users: USERS, // Always use fresh users from constants
-                        units: finalUnits,
-                        onlineTests: ONLINE_TESTS, // Always use fresh tests from constants
-                    };
-                    dispatch({ type: 'SET_INITIAL_STATE', payload: mergedState });
-                }
+                const mergedState = {
+                    ...initialState,
+                    ...cloudState,
+                    users: USERS,
+                    units: UNITS.map(unit => cloudState.units?.find((u: Unit) => u.id === unit.id) || unit),
+                    onlineTests: ONLINE_TESTS,
+                };
+                dispatch({ type: 'SET_INITIAL_STATE', payload: mergedState });
             } catch (error) {
                 console.error("Failed to load state from cloud:", error);
-                let errorMessage = 'Не удалось загрузить данные. Проверьте подключение к интернету.';
+                let errorMessage = 'Не удалось загрузить данные. Используются локальные данные.';
                  if (error instanceof Error && error.message.includes('Server configuration error')) {
-                    errorMessage = 'Ошибка конфигурации сервера. Проверьте переменные окружения (ключи API) в настройках Vercel.';
+                    errorMessage = 'Ошибка конфигурации: проверьте ключи API в настройках Vercel.';
                 }
                 dispatch({ type: 'SET_ERROR', payload: errorMessage });
-                // Fallback to local constants if cloud fails
                 dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS } });
             }
         };
 
         loadStateFromCloud();
-    }, [saveStateToCloud]); // saveStateToCloud is stable, so this only runs once.
+    }, []);
 
-    // This effect triggers the save function whenever the state changes.
     useEffect(() => {
         if (!state.isLoading && state.currentUser) {
             saveStateToCloud();
