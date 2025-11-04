@@ -1,12 +1,7 @@
-import { v2 as cloudinary } from 'cloudinary';
-import Busboy from 'busboy';
-
-cloudinary.config({
-  cloud_name: process.env.VITE_CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
-});
+import { formidable } from 'formidable';
+import fs from 'fs';
+import FormData from 'form-data';
+import fetch from 'node-fetch'; // Required for making form-data requests in Node.js
 
 export const config = {
   api: {
@@ -14,38 +9,51 @@ export const config = {
   },
 };
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST']);
-    return res.status(405).end('Method Not Allowed');
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const busboy = Busboy({ headers: req.headers });
-  let uploadPromise = new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: 'english-course' },
-      (error, result) => {
-        if (error) {
-          console.error('Cloudinary Upload Error:', error);
-          reject(new Error('Upload to Cloudinary failed.'));
-        } else {
-          resolve(result);
-        }
-      }
-    );
+  const API_KEY = process.env.IMGBB_API_KEY;
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'Server configuration error: ImgBB API key is missing.' });
+  }
 
-    busboy.on('file', (fieldname, file) => {
-      file.pipe(stream);
-    });
+  try {
+    const form = formidable({});
+    const [fields, files] = await form.parse(req);
+    
+    const imageFile = files.file?.[0];
+    
+    if (!imageFile) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+    }
 
-    busboy.on('finish', () => {
-      // The uploadPromise will resolve or reject on its own
+    const formData = new FormData();
+    formData.append('image', fs.createReadStream(imageFile.filepath));
+
+    const imgbbResponse = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
+      method: 'POST',
+      body: formData,
     });
     
-    req.pipe(busboy);
-  });
+    if (!imgbbResponse.ok) {
+        const errorText = await imgbbResponse.text();
+        console.error('ImgBB API Error:', errorText);
+        throw new Error(`ImgBB upload failed with status: ${imgbbResponse.status}`);
+    }
 
-  uploadPromise
-    .then(result => res.status(200).json({ secure_url: result.secure_url }))
-    .catch(error => res.status(500).json({ error: error.message }));
+    const imgbbResult = await imgbbResponse.json();
+
+    if (!imgbbResult.success) {
+        console.error('ImgBB API Error:', imgbbResult);
+        throw new Error('ImgBB returned an error.');
+    }
+
+    res.status(200).json({ secure_url: imgbbResult.data.url });
+
+  } catch (error) {
+    console.error('Upload handler error:', error);
+    res.status(500).json({ error: 'Internal server error during file upload.' });
+  }
 }
