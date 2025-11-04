@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage } from '../types';
@@ -17,14 +18,12 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
-    const [imageUrl, setImageUrl] = useState(word.image);
     const [isSaved, setIsSaved] = useState(false);
     
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const base64 = await fileToBase64(file);
-            setImageUrl(base64);
             dispatch({ type: 'UPDATE_WORD_IMAGE', payload: { unitId, roundId, wordId: word.id, imageUrl: base64 }});
             setIsSaved(true);
             setTimeout(() => setIsSaved(false), 2000);
@@ -37,14 +36,10 @@ const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, on
         });
     };
 
-    useEffect(() => {
-        setImageUrl(word.image);
-    }, [word.image]);
-
     return (
         <div className="bg-white p-4 rounded-lg shadow-md flex flex-col sm:flex-row items-center gap-4">
             <img 
-                src={imageUrl || 'https://via.placeholder.com/400x300?text=No+Image'} 
+                src={word.image || 'https://via.placeholder.com/400x300?text=No+Image'} 
                 alt={word.english} 
                 className="w-full sm:w-40 h-32 object-contain rounded-md bg-slate-100 flex-shrink-0"
             />

@@ -317,6 +317,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
         
         case 'UPDATE_WORD_IMAGE': {
+            console.log('Reducer: Handling UPDATE_WORD_IMAGE', action.payload); // DEBUG
             const { unitId, roundId, wordId, imageUrl } = action.payload;
             return {
                 ...state,
@@ -390,7 +391,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
             };
         }
         
-        // Add all other cases
         default:
             return state;
     }
@@ -403,8 +403,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const saveStateToCloud = useCallback((currentState: AppState) => {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        console.log('Scheduling a save to the cloud...'); // DEBUG
 
         debounceTimer.current = setTimeout(() => {
+            console.log('Executing save to the cloud.'); // DEBUG
             const { currentUser, error, isLoading, ...stateToSave } = currentState;
 
             fetch('/api/data', {
@@ -446,12 +448,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
                     saveStateToCloud({ ...initialState, ...defaultState });
                 } else {
-                     const mergedState = {
+                     const finalUnits: Unit[] = [...UNITS];
+                     if(cloudState.units && Array.isArray(cloudState.units)) {
+                         cloudState.units.forEach((cloudUnit: Unit) => {
+                             const index = finalUnits.findIndex(u => u.id === cloudUnit.id);
+                             if (index !== -1) {
+                                 finalUnits[index] = cloudUnit; // Overwrite default with saved
+                             } else {
+                                 finalUnits.push(cloudUnit); // Add custom unit
+                             }
+                         });
+                     }
+                    const mergedState = {
                         ...initialState,
                         ...cloudState,
-                        users: USERS, // Always use fresh users from constants
-                        units: [...(cloudState.units || []), ...UNITS.filter(u => !cloudState.units?.some((cu: Unit) => cu.id === u.id))],
-                        onlineTests: [...(cloudState.onlineTests || []), ...ONLINE_TESTS.filter(t => !cloudState.onlineTests?.some((ct: OnlineTest) => ct.id === t.id))],
+                        users: USERS,
+                        units: finalUnits,
+                        onlineTests: ONLINE_TESTS,
                     };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: mergedState });
                 }
