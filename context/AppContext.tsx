@@ -276,6 +276,120 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, units: state.units.filter(u => u.id !== action.payload.unitId) };
         }
 
+        case 'ADD_ROUND': {
+            const { unitId, roundName } = action.payload;
+            const newRound: Round = { id: `round-${Date.now()}`, name: roundName, words: [] };
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? { ...u, rounds: [...u.rounds, newRound] } : u)
+            };
+        }
+
+        case 'DELETE_ROUND': {
+            const { unitId, roundId } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? { ...u, rounds: u.rounds.filter(r => r.id !== roundId) } : u)
+            };
+        }
+
+        case 'ADD_WORD_TO_ROUND': {
+            const { unitId, roundId, word } = action.payload;
+            const newWord: Word = { ...word, id: `word-${Date.now()}` };
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? { ...r, words: [...r.words, newWord] } : r)
+                } : u)
+            };
+        }
+
+        case 'DELETE_WORD': {
+            const { unitId, roundId, wordId } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? { ...r, words: r.words.filter(w => w.id !== wordId) } : r)
+                } : u)
+            };
+        }
+        
+        case 'UPDATE_WORD_IMAGE': {
+            const { unitId, roundId, wordId, imageUrl } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? {
+                        ...r,
+                        words: r.words.map(w => w.id === wordId ? { ...w, image: imageUrl } : w)
+                    } : r)
+                } : u)
+            };
+        }
+
+        case 'CREATE_CHAT': {
+            if (!state.currentUser) return state;
+            const allParticipantIds = Array.from(new Set([...action.payload.participantIds, state.currentUser.id]));
+            if (!action.payload.isGroup) {
+                const existingChat = state.chats.find(chat =>
+                    !chat.isGroup &&
+                    chat.participants.length === allParticipantIds.length &&
+                    chat.participants.every(p => allParticipantIds.includes(p.userId))
+                );
+                if (existingChat) return state;
+            }
+            const newChat: Chat = {
+                id: `chat-${Date.now()}`,
+                participants: allParticipantIds.map(userId => {
+                    const user = state.users.find(u => u.id === userId);
+                    return { userId: userId, name: user?.name || 'Unknown' };
+                }),
+                messages: [],
+                isGroup: action.payload.isGroup,
+                lastRead: {},
+            };
+            return { ...state, chats: [...state.chats, newChat] };
+        }
+
+        case 'RENAME_CHAT': {
+            return {
+                ...state,
+                chats: state.chats.map(c => c.id === action.payload.chatId ? { ...c, name: action.payload.newName } : c)
+            }
+        }
+
+        case 'SEND_MESSAGE': {
+            if (!state.currentUser) return state;
+            const newMessage: ChatMessage = {
+                id: `msg-${Date.now()}`,
+                senderId: state.currentUser.id,
+                text: action.payload.text,
+                timestamp: Date.now()
+            };
+            return {
+                ...state,
+                chats: state.chats.map(chat => chat.id === action.payload.chatId ? {
+                    ...chat,
+                    messages: [...chat.messages, newMessage],
+                    lastRead: { ...chat.lastRead, [state.currentUser!.id]: newMessage.timestamp }
+                } : chat)
+            };
+        }
+
+        case 'MARK_AS_READ': {
+            if (!state.currentUser) return state;
+            return {
+                ...state,
+                chats: state.chats.map(chat => chat.id === action.payload.chatId ? {
+                    ...chat,
+                    lastRead: { ...chat.lastRead, [state.currentUser!.id]: Date.now() }
+                } : chat)
+            };
+        }
+        
         // Add all other cases
         default:
             return state;
@@ -328,7 +442,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 if (!cloudState || !cloudState.users || cloudState.users.length === 0) {
                     console.log("Cloud data is empty/invalid. Initializing...");
-                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS };
+                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [] };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
                     saveStateToCloud({ ...initialState, ...defaultState });
                 } else {
