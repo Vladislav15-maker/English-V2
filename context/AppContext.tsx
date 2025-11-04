@@ -50,7 +50,7 @@ type Action =
   | { type: 'SUBMIT_ONLINE_TEST_ANSWER'; payload: { studentId: string; answers: StudentAnswer[], progress: number } }
   | { type: 'FINISH_ONLINE_TEST'; payload: { studentId: string, timeFinished: number } }
   | { type: 'CLOSE_ONLINE_TEST_SESSION' }
-  | { type: 'GRADE_ONLINE_TEST'; payload: { studentId: string; resultId: string; grade?: number; status?: TestStatus, comment?: string } }
+  | { type: 'GRADE_ONLINE_TEST'; payload: { studentId: string; resultId: string; grade?: number; status: TestStatus, comment?: string } }
   | { type: 'DELETE_ONLINE_TEST_GRADE'; payload: { studentId: string; resultId: string; } }
   | { type: 'SEND_TEACHER_MESSAGE'; payload: string }
   | { type: 'UPDATE_TEACHER_MESSAGE'; payload: { messageId: string; newMessage: string } }
@@ -92,7 +92,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'LOGOUT': {
       if(state.currentUser) {
         const newPresence = { ...state.presence, [state.currentUser.id]: Date.now() };
-        return { ...state, currentUser: null, presence: newPresence };
+        return { ...initialState, users: state.users, units: state.units, onlineTests: state.onlineTests, currentUser: null, presence: newPresence };
       }
       return { ...state, currentUser: null };
     }
@@ -120,18 +120,16 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'DELETE_UNIT_GRADE': {
         const { studentId, unitId } = action.payload;
         if (!state.studentProgress[studentId]?.[unitId]) return state;
+        
         const newStudentProgress = {
             ...state.studentProgress,
             [studentId]: {
                 ...state.studentProgress[studentId],
                 [unitId]: {
                     ...state.studentProgress[studentId][unitId],
-                    grade: undefined,
-                    comment: undefined,
                 },
             },
         };
-        // This is a bit verbose to make sure we don't have dangling undefined keys
         delete newStudentProgress[studentId][unitId].grade;
         delete newStudentProgress[studentId][unitId].comment;
 
@@ -146,14 +144,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
     }
     case 'UPDATE_OFFLINE_TEST': {
         const { studentId, id } = action.payload;
-        const newResults = JSON.parse(JSON.stringify(state.offlineTestResults));
-        if (newResults[studentId]) {
-            const index = newResults[studentId].findIndex((t: OfflineTestResult) => t.id === id);
-            if (index !== -1) {
-                newResults[studentId][index] = action.payload;
+        if (!state.offlineTestResults[studentId]) return state;
+        return {
+            ...state,
+            offlineTestResults: {
+                ...state.offlineTestResults,
+                [studentId]: state.offlineTestResults[studentId].map(r => r.id === id ? action.payload : r),
             }
-        }
-        return { ...state, offlineTestResults: newResults };
+        };
     }
      case 'DELETE_OFFLINE_TEST_GRADE': {
         const { studentId, resultId } = action.payload;
@@ -256,8 +254,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 [studentId]: state.onlineTestResults[studentId].map(result => {
                     if (result.id === resultId) {
                         const newResult: OnlineTestResult = { ...result, status, comment };
-                        if (grade !== undefined) newResult.grade = grade;
-                        else delete (newResult as Partial<OnlineTestResult>).grade;
+                        if (grade !== undefined) {
+                           newResult.grade = grade;
+                        } else {
+                           delete (newResult as Partial<OnlineTestResult>).grade;
+                        }
                         return newResult;
                     }
                     return result;
@@ -425,7 +426,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
             }
         } else {
             // Placeholder for offline test mistake unit creation
-            // This logic should be more specific if offline tests have word lists
             incorrectWords = [...state.units[0].rounds[0].words.slice(0, 3), ...state.units[1].rounds[1].words.slice(0, 2)];
         }
 
@@ -557,14 +557,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const storedState = localStorage.getItem(APP_STATE_KEY);
       if (storedState) {
         const parsed = JSON.parse(storedState);
-        // Prioritize localStorage for units, ensuring all user creations/modifications are kept.
-        const units = parsed.units || initial.units;
+        
+        // Merge initial constant data with stored user-generated data to prevent data loss
+        const initialUnitsById = new Map(initial.units.map(u => [u.id, u]));
+        const storedUnits = parsed.units || [];
+        const combinedUnits = [...storedUnits];
+
+        // Add any new units from constants that are not in storage
+        initial.units.forEach(initialUnit => {
+            if (!combinedUnits.some(storedUnit => storedUnit.id === initialUnit.id)) {
+                combinedUnits.push(initialUnit);
+            }
+        });
+
         return {
            ...initial,
            ...parsed,
-           units, // Use the full units array from storage if it exists
-           users: USERS, // Constants should not be persisted
-           onlineTests: ONLINE_TESTS, // Constants should not be persisted
+           units: combinedUnits,
+           users: USERS, 
+           onlineTests: ONLINE_TESTS,
         };
       }
     } catch (error) {
@@ -605,6 +616,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       clearInterval(poll);
       clearInterval(presenceInterval);
+      if (state.currentUser) {
+          // This should ideally be a dispatch to an action that handles this
+          const newPresence = { ...state.presence, [state.currentUser.id]: Date.now() };
+          const finalState = { ...state, presence: newPresence };
+          localStorage.setItem(APP_STATE_KEY, JSON.stringify(finalState));
+      }
     }
   }, [state.activeOnlineTestSession, state.currentUser]);
 
