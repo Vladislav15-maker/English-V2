@@ -1,40 +1,37 @@
-// Fix: Add Vite client types to provide type definitions for `import.meta.env`.
-/// <reference types="vite/client" />
 
 import React, { createContext, useReducer, useEffect, useContext, Dispatch } from 'react';
 import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
 
 // --- Helper Functions for API Interaction ---
-const BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID;
-const API_KEY = import.meta.env.VITE_JSONBIN_API_KEY;
+// Use `process.env` which is more universally supported by bundlers for environment variables.
+const BIN_ID = process.env.VITE_JSONBIN_BIN_ID;
+const API_KEY = process.env.VITE_JSONBIN_API_KEY;
 const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
 // Debounce function to avoid too many API calls
-// Fix: Use `ReturnType<typeof setTimeout>` for the timer ID type, as `NodeJS.Timeout` is not available in the browser environment.
 let debounceTimer: ReturnType<typeof setTimeout>;
 const saveStateToCloud = (state: AppState) => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
         if (!API_KEY || !BIN_ID) {
-            console.error("JSONBin API Key or Bin ID is not configured.");
+            // Silently fail if keys are not set, console warning is shown on load.
             return;
         }
-        // Don't save currentUser in the shared state, as it's session-specific
-        const stateToSave = { ...state, currentUser: null, error: null };
+        // Don't save currentUser or loading/error states in the shared bin
+        const stateToSave = { ...state, currentUser: null, error: null, isLoading: false };
 
         fetch(`${BIN_URL}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Master-Key': API_KEY,
-                'X-Bin-Versioning': 'false' // To avoid creating new versions on each save
+                'X-Bin-Versioning': 'false'
             },
             body: JSON.stringify(stateToSave),
         }).catch(error => console.error("Failed to save state to cloud:", error));
     }, 1500); // Save 1.5 seconds after the last change
 };
-
 
 interface AppState {
   users: User[];
@@ -50,13 +47,13 @@ interface AppState {
   chats: Chat[];
   presence: { [userId: string]: 'online' | number };
   error: string | null;
-  isLoading: boolean; // To show loading indicator
+  isLoading: boolean;
 }
 
 const initialState: AppState = {
-  users: USERS,
-  units: UNITS,
-  onlineTests: ONLINE_TESTS,
+  users: [], // Start empty, will be loaded from cloud or constants
+  units: [],
+  onlineTests: [],
   currentUser: null,
   studentProgress: {},
   offlineTestResults: {},
@@ -67,7 +64,7 @@ const initialState: AppState = {
   chats: [],
   presence: {},
   error: null,
-  isLoading: true, // Start in loading state
+  isLoading: true,
 };
 
 type Action =
@@ -117,11 +114,11 @@ const AppContext = createContext<{
 });
 
 const appReducer = (state: AppState, action: Action): AppState => {
-  // All actions will now just update the state optimistically.
-  // The useEffect hook will handle saving the new state to the cloud.
   switch (action.type) {
     case 'LOGIN': {
-      const user = state.users.find(u => u.login === action.payload.login && u.password === action.payload.password);
+      const user = state.users.find(
+          (u) => u.login.toLowerCase() === action.payload.login.toLowerCase() && u.password === action.payload.password
+      );
       if (user) {
           const newPresence = { ...state.presence, [user.id]: 'online' as const };
           return { ...state, currentUser: user, error: null, presence: newPresence };
@@ -131,6 +128,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'LOGOUT': {
       if(state.currentUser) {
         const newPresence = { ...state.presence, [state.currentUser.id]: Date.now() };
+        // Create a temporary new state to save to the cloud before resetting
+        const stateToSave = { ...state, currentUser: null, presence: newPresence };
+        saveStateToCloud(stateToSave);
+        // Reset the state for the logged-out user
         return { ...initialState, users: state.users, units: state.units, onlineTests: state.onlineTests, currentUser: null, presence: newPresence, isLoading: false };
       }
       return { ...state, currentUser: null };
@@ -142,8 +143,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
     case 'SET_ERROR':
       return { ...state, error: action.payload };
     
-    // The rest of the reducer cases remain the same as before, they just update the state.
-    // The magic now happens in the `useEffect` which saves the state.
+    // All other reducers remain the same, performing optimistic updates.
+    // The `useEffect` hook handles the saving.
     case 'SUBMIT_ROUND_TEST': {
       const { studentId, unitId, roundId, result } = action.payload;
       const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
@@ -221,8 +222,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
         };
         return { ...state, activeOnlineTestSession: newSession };
     }
-    // ... all other reducer cases are the same as before ...
-     case 'JOIN_ONLINE_TEST_SESSION': {
+    case 'JOIN_ONLINE_TEST_SESSION': {
         if (!state.activeOnlineTestSession || !state.currentUser) return state;
         const { studentId } = action.payload;
         if (state.activeOnlineTestSession.students[studentId] || !state.activeOnlineTestSession.invitedStudentIds.includes(studentId)) return state;
@@ -586,65 +586,78 @@ const appReducer = (state: AppState, action: Action): AppState => {
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
-  // Effect to load state from cloud on initial app load
   useEffect(() => {
     if (!API_KEY || !BIN_ID) {
-        console.warn("JSONBin environment variables not set. App will not save data online.");
-        dispatch({ type: 'SET_LOADING', payload: false });
+        console.warn("JSONBin environment variables not set. App will fall back to local data.");
+        dispatch({ type: 'SET_STATE_FROM_CLOUD', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, isLoading: false } });
         return;
     }
 
-    fetch(BIN_URL, {
-        headers: { 'X-Master-Key': API_KEY }
+    fetch(BIN_URL, { headers: { 'X-Master-Key': API_KEY } })
+    .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
     })
-    .then(res => res.json())
     .then(data => {
-        // The data is inside the 'record' property
         const cloudState = data.record;
-        // Check if it's a valid state, not the initial message
-        if (cloudState && !cloudState.ready) {
-            // Merge with local constants to ensure units/tests are up to date
-            const combinedUnits = [...(cloudState.units || [])];
-             UNITS.forEach(initialUnit => {
-                if (!combinedUnits.some(storedUnit => storedUnit.id === initialUnit.id)) {
-                    combinedUnits.push(initialUnit);
-                }
-            });
-            dispatch({ type: 'SET_STATE_FROM_CLOUD', payload: {...cloudState, units: combinedUnits} });
+        if (cloudState && cloudState.users && cloudState.users.length > 0) {
+            console.log("Loaded state from cloud. Merging...");
+            const mergedState = {
+                ...initialState,
+                ...cloudState,
+                users: cloudState.users,
+                units: [...cloudState.units, ...UNITS.filter(u => !cloudState.units.some((cu: Unit) => cu.id === u.id))],
+                onlineTests: cloudState.onlineTests || ONLINE_TESTS,
+            };
+            dispatch({ type: 'SET_STATE_FROM_CLOUD', payload: mergedState });
         } else {
-            dispatch({ type: 'SET_LOADING', payload: false });
+            console.log("Initializing empty cloud storage with default data.");
+            const initialStateToSync = {
+                ...initialState,
+                users: USERS,
+                units: UNITS,
+                onlineTests: ONLINE_TESTS,
+                isLoading: false,
+            };
+            dispatch({ type: 'SET_STATE_FROM_CLOUD', payload: initialStateToSync });
+            saveStateToCloud(initialStateToSync);
         }
     })
     .catch(error => {
-        console.error("Failed to load state from cloud:", error);
-        dispatch({ type: 'SET_LOADING', payload: false });
+        console.error("Failed to load state from cloud, falling back to local defaults:", error);
+        dispatch({ type: 'SET_ERROR', payload: 'Не удалось загрузить данные. Используются локальные данные.' });
+        dispatch({ type: 'SET_STATE_FROM_CLOUD', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, isLoading: false } });
     });
   }, []);
 
-  // Effect to save state to the cloud whenever it changes
   useEffect(() => {
-    // We don't save during initial load or if there's no user
-    if (!state.isLoading && state.currentUser) {
+    if (!state.isLoading) {
         saveStateToCloud(state);
     }
   }, [state]);
 
-  // This effect handles real-time polling for session updates and presence
   useEffect(() => {
     const presenceInterval = setInterval(() => {
       if(state.currentUser) {
         dispatch({ type: 'UPDATE_PRESENCE' });
       }
-    }, 30000); // Update presence every 30 seconds
+    }, 30000);
+
+    const handleBeforeUnload = () => {
+        if (state.currentUser) {
+            const newState = { ...state, presence: { ...state.presence, [state.currentUser.id]: Date.now() }};
+            saveStateToCloud(newState);
+        }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       clearInterval(presenceInterval);
-      if (state.currentUser) {
-          const newState = { ...state, presence: { ...state.presence, [state.currentUser.id]: Date.now() }};
-          saveStateToCloud(newState);
-      }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      handleBeforeUnload(); // Save presence on component unmount too
     }
-  }, [state.currentUser]);
+  }, [state.currentUser, state]);
 
 
   return (
