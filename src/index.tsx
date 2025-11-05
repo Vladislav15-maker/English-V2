@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App'; // Этот путь должен быть правильным, если App.tsx лежит рядом
+// FIX: Импортируем LoginView вместо App. Убедитесь, что у вас есть этот файл.
+// Если главный компонент называется иначе, укажите его имя.
+import LoginView from '@/components/LoginView'; 
 import { AppProvider } from '@/context/AppContext';
 import '@/styles/globals.css';
 
@@ -12,7 +14,8 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <AppProvider>
-      <App />
+      {/* FIX: Отображаем LoginView как главный компонент */}
+      <LoginView />
     </AppProvider>
   </React.StrictMode>
 );
