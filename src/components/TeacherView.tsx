@@ -3,17 +3,23 @@ import { useAppContext } from '@/context/AppContext';
 import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage, Announcement } from '@/types';
 import Modal from '@/components/common/Modal';
 import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from '@/components/common/Icons';
-// Тип для переключения вкладок в режиме учителя
-type TeacherViewMode =
+export type TeacherViewMode =
   | 'dashboard'
   | 'students'
+  | 'student_detail'
   | 'tests'
   | 'results'
   | 'announcements'
   | 'messages'
-  | 'online_test_history';
+  | 'online_test_history'
+  | 'online_test_monitor'
+  | 'offline_grader'
+  | 'online_test_manager'
+  | 'content_editor'
+  | 'chat'
+  | 'online_test_results'; // ← добавлено
 
-
+const [view, setView] = useState<TeacherViewMode>('dashboard');
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
