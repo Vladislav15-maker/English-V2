@@ -548,26 +548,10 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
     );
 }
-
-// --- Интерфейсы для чата ---
-interface ChatParticipant {
-    userId: string;
-    name: string;
-}
-
-interface ChatMessage {
-    text: string;
-    timestamp: number;
-    senderId: string;
-}
-
-interface Chat {
-    id: string;
-    name?: string;
-    isGroup?: boolean;
-    participants: ChatParticipant[];
-    messages: ChatMessage[];
-}
+// --- УДАЛИ вот это ---
+// interface ChatParticipant { ... }
+// interface ChatMessage { ... }
+// interface Chat { ... }
 
 // --- Компонент ---
 const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -580,11 +564,10 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [readReceiptsInfo, setReadReceiptsInfo] = useState<ChatMessage | null>(null);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
-    // --- Исправлено: типы для c и p ---
     const userChats = useMemo(() =>
         chats
             .filter((c: Chat) =>
-                c.participants.some((p: ChatParticipant) => p.userId === currentUser?.id)
+                c.participants.some((p: any) => p.userId === currentUser?.id)
             )
             .sort((a: Chat, b: Chat) => {
                 const lastMsgA = a.messages[a.messages.length - 1]?.timestamp || 0;
@@ -624,11 +607,11 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         if (chat.isGroup && chat.name) return chat.name;
         if (chat.isGroup)
             return chat.participants
-                .filter((p: ChatParticipant) => p.userId !== currentUser?.id)
-                .map(p => p.name)
+                .filter((p: any) => p.userId !== currentUser?.id)
+                .map((p: any) => p.name)
                 .join(', ');
         const otherUser = chat.participants.find(
-            (p: ChatParticipant) => p.userId !== currentUser?.id
+            (p: any) => p.userId !== currentUser?.id
         );
         return otherUser?.name || 'Unknown User';
     };
