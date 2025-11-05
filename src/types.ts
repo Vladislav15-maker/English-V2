@@ -157,3 +157,11 @@ export interface Chat {
     isGroup: boolean;
     lastRead: { [userId: string]: number }; // timestamp of last read message
 }
+// ДОБАВЬТЕ ЭТОТ КОД В КОНЕЦ ВАШЕГО ФАЙЛА С ТИПАМИ
+
+export interface Announcement {
+  id: string;
+  message: string;
+  type: 'active' | 'info';
+  timestamp: number;
+}
