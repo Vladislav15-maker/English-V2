@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { LogoIcon } from './common/Icons';
-import { UserRole } from '../types'; // 👈 обязательно импортируем enum
+import { UserRole } from '../types';
 
 const LoginScreen: React.FC = () => {
   const { state, dispatch } = useAppContext();
@@ -18,7 +18,9 @@ const LoginScreen: React.FC = () => {
       payload: {
         id: '1',
         name: login,
-        role: UserRole.Student, // ✅ исправлено
+        login: login,
+        password: password,
+        role: UserRole.Student,
       },
     });
   };

@@ -3,6 +3,14 @@ import { useAppContext } from '@/context/AppContext';
 import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage, Announcement } from '@/types';
 import Modal from '@/components/common/Modal';
 import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from '@/components/common/Icons';
+// Тип для переключения вкладок в режиме учителя
+type TeacherViewMode =
+  | 'dashboard'
+  | 'students'
+  | 'tests'
+  | 'results'
+  | 'announcements'
+  | 'messages';
 
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
