@@ -1,7 +1,10 @@
 import { Redis } from '@upstash/redis';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-// Эта функция будет обрабатывать каждого клиента индивидуально
+// Создаем ОДНОГО клиента Redis, который будет использоваться для всех подписок.
+// Upstash Redis спроектирован для обработки множества одновременных подключений через один инстанс.
+const redis = Redis.fromEnv();
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -13,36 +16,31 @@ export default async function handler(
   res.flushHeaders();
   console.log("Client connected to SSE.");
 
-  // Создаем НОВОЕ соединение Redis специально для этого подписчика
-  const subscriber = Redis.fromEnv();
-  
-  // Подписываемся на нужный нам канал
-  await subscriber.subscribe('state-changes');
+  // Создаем дубликат клиента специально для подписки.
+  // Это хорошая практика, чтобы не блокировать основной клиент.
+  const subscriber = redis.duplicate();
 
-  // Используем цикл для прослушивания сообщений
-  // Этот цикл будет "висеть" до тех пор, пока клиент не отключится
-  try {
-    for await (const message of subscriber.listen()) {
-      if (typeof message === 'string') {
-        // Отправляем данные клиенту в правильном формате SSE
-        res.write(`data: ${message}\n\n`);
-      }
+  // Используем `psubscribe`, который является стандартным для этой библиотеки.
+  // Он принимает имя канала и функцию-обработчик.
+  await subscriber.psubscribe('state-changes', (channel, message) => {
+    console.log(`Received message '${message}' from channel '${channel}'`);
+    if (message === 'updated') {
+      res.write(`data: ${message}\n\n`);
     }
-  } catch (error) {
-    console.error("Error in SSE listener loop:", error);
-  } finally {
-    // Этот блок выполнится, когда клиент закроет соединение
-    console.log("Client disconnected from SSE. Unsubscribing...");
-    await subscriber.unsubscribe('state-changes');
-    // Закрываем соединение, чтобы не создавать утечек
-    await subscriber.quit();
-  }
+  });
+
+  // Когда клиент отключается (закрывает вкладку), мы отписываемся и закрываем соединение.
+  req.on('close', () => {
+    console.log("Client disconnected from SSE. Unsubscribing and quitting.");
+    subscriber.punsubscribe('state-changes');
+    subscriber.quit();
+  });
 }
 
-// Этот флаг важен для Next.js, чтобы он не трогал тело ответа
+// Эта конфигурация остается критически важной для Next.js
 export const config = {
   api: {
     bodyParser: false,
-    externalResolver: true, // Говорим Next.js, что мы сами управляем ответом
+    externalResolver: true,
   },
 };
