@@ -3,11 +3,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage } from '../types';
 import Modal from './common/Modal';
-import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons'; // FIX: Added new icons
+import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
 
 type TeacherViewMode = 'dashboard' | 'student_detail' | 'offline_grader' | 'online_test_manager' | 'online_test_monitor' | 'online_test_history' | 'online_test_results' | 'content_editor' | 'chat';
 
-// ... (Components WordItemEditor, AddWordForm, AnswerReviewModal, ChatInterface are unchanged)
+// ... (Components WordItemEditor, AddWordForm, AnswerReviewModal, ChatInterface are unchanged from previous response)
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
@@ -466,9 +466,7 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
 };
 
-
 const TeacherView: React.FC = () => {
-    // ... (rest of the component is unchanged)
     const { state, dispatch } = useAppContext();
     const { currentUser, users, studentProgress, offlineTestResults, activeOnlineTestSession, onlineTests, onlineTestResults, announcements } = state;
     const [view, setView] = useState<TeacherViewMode>('dashboard');
@@ -496,10 +494,8 @@ const TeacherView: React.FC = () => {
     const [editingMessage, setEditingMessage] = useState<TeacherMessage | null>(null);
     const [editedMessageText, setEditedMessageText] = useState('');
     
-    // FIX: State for new announcement system
     const [activeReminderText, setActiveReminderText] = useState(announcements?.active || '');
     const [generalInfoText, setGeneralInfoText] = useState(announcements?.info || '');
-
 
     const [reviewingRoundResult, setReviewingRoundResult] = useState<StudentRoundResult | null>(null);
     const [gradeInput, setGradeInput] = useState<{ [id: string]: string }>({});
@@ -568,8 +564,6 @@ const TeacherView: React.FC = () => {
     const handleStartOnlineTest = () => {
         if (!selectedOnlineTest || selectedStudentsForTest.length === 0) return;
         dispatch({ type: 'CREATE_ONLINE_TEST_SESSION', payload: { testId: selectedOnlineTest.id, invitedStudentIds: selectedStudentsForTest } });
-        // FIX: Removed setView('online_test_monitor'). The useEffect below will handle this automatically when the state updates.
-        // This prevents the redirect-to-dashboard bug.
     };
     
     const handleSendMessage = () => {
@@ -578,7 +572,6 @@ const TeacherView: React.FC = () => {
         setMessage('');
     };
 
-    // FIX: Handlers for the new announcement system
     const handleSaveAnnouncement = (type: 'active' | 'info') => {
         const payload = {
             active: type === 'active' ? activeReminderText : announcements?.active,
@@ -596,7 +589,6 @@ const TeacherView: React.FC = () => {
         };
         dispatch({ type: 'SET_ANNOUNCEMENT', payload });
     };
-
 
     const handleEditMessage = (msg: TeacherMessage) => {
         setEditingMessage(msg);
@@ -712,11 +704,9 @@ const TeacherView: React.FC = () => {
                 </table>
             </div>
             
-            {/* FIX: New Announcement System */}
             <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg">
                 <h3 className="text-lg font-bold flex items-center gap-2 mb-4"><MegaphoneIcon className="w-6 h-6 text-indigo-500"/> Центр объявлений для учеников</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Active Reminder */}
                     <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
                          <label className="font-bold text-red-800 flex items-center gap-2"><ExclamationTriangleIcon className="w-5 h-5"/> Активное напоминание (красный блок)</label>
                          <textarea 
@@ -730,7 +720,6 @@ const TeacherView: React.FC = () => {
                             <button onClick={() => handleClearAnnouncement('active')} className="bg-slate-400 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-slate-500">Очистить</button>
                         </div>
                     </div>
-                     {/* General Info */}
                     <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
                          <label className="font-bold text-blue-800 flex items-center gap-2"><InformationCircleIcon className="w-5 h-5"/> Общее объявление (синий блок)</label>
                          <textarea 
@@ -795,7 +784,7 @@ const TeacherView: React.FC = () => {
         if (!selectedStudent) return null;
         const studentId = selectedStudent.id;
         const progress = studentProgress[studentId] || {};
-        const studentOfflineTests = offlineTestResults[studentId] || []; // FIX: Get student's offline tests
+        const studentOfflineTests = offlineTestResults[studentId] || [];
         
         const handleSetGrade = (unitId: string) => {
             const grade = parseInt(gradeInput[unitId]);
@@ -823,7 +812,6 @@ const TeacherView: React.FC = () => {
                         onClose={() => setReviewingRoundResult(null)} 
                     />
                 )}
-                {/* FIX: Modal for editing an offline test */}
                 {editingTest && (
                      <Modal isVisible={true} onClose={() => setEditingTest(null)} title={`Редактировать: ${editingTest.testName}`}>
                          <form onSubmit={handleUpdateOfflineTest} className="space-y-4">
@@ -913,7 +901,6 @@ const TeacherView: React.FC = () => {
                     })}
                 </div>
 
-                {/* FIX: Offline Test History section */}
                 <h3 className="text-xl font-semibold mb-2 mt-8">История офлайн-тестов</h3>
                 <div className="bg-white p-4 rounded-lg shadow">
                     {studentOfflineTests.length > 0 ? (

@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage } from '../types';
-import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons'; // FIX: Added new icons
+import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
 import SecureInput from './common/SecureInput';
 import Modal from './common/Modal';
 
-// Multi-stage Round Flow Component
+// ... (Components RoundFlow, LearnStage, useTestStage, WriteStage, ChoiceStage, ResultsStage, OnlineTestSession, GradesView, ChatInterface are unchanged from previous response)
 type Stage = 'learn' | 'write' | 'choice_text' | 'choice_image' | 'results';
 
-// ... (Components RoundFlow, LearnStage, WriteStage, ChoiceStage, ResultsStage, OnlineTestSession are unchanged)
 const RoundFlow: React.FC<{ unit: Unit; round: Round; onBack: () => void }> = ({ unit, round, onBack }) => {
     const { state, dispatch } = useAppContext();
     const [currentStage, setCurrentStage] = useState<Stage>('learn');
@@ -329,7 +328,6 @@ const ResultsStage: React.FC<{ stageResults: { [key in StageType]?: StageResult 
     );
 };
 
-// Online Test Session
 const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     const { state, dispatch } = useAppContext();
     const { currentUser, activeOnlineTestSession } = state;
@@ -467,14 +465,11 @@ const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => 
     );
 };
 
-
-// Grades View
 const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { state } = useAppContext();
     const { currentUser, studentProgress, onlineTestResults, offlineTestResults, units, onlineTests } = state;
     const progress = studentProgress[currentUser!.id] || {};
     const onlineResults = onlineTestResults[currentUser!.id] || [];
-    // FIX: Make sure offlineResults are correctly retrieved and displayed
     const offlineResults = offlineTestResults[currentUser!.id] || [];
 
     return (
@@ -528,8 +523,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         ) : <p className="text-slate-500">Нет результатов онлайн тестов.</p>}
                     </div>
                 </div>
-                
-                {/* FIX: Section for displaying offline test results */}
+
                  <div>
                     <h3 className="text-xl font-bold mb-3">Результаты Оффлайн Тестов</h3>
                     <div className="bg-white p-4 rounded-lg shadow">
@@ -539,8 +533,8 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                     <div key={res.id} className="border-b last:border-b-0 p-3">
                                         <div className="flex justify-between items-center">
                                             <p className="font-semibold">{res.testName}</p>
-                                            <span className={res.status === TestStatus.Passed ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                                                {res.status === TestStatus.Passed ? 'Прошёл' : 'Не прошёл'}
+                                            <span className={res.status === TestStatus.Passed ? 'text-green-600 font-semibold' : res.status === TestStatus.Failed ? 'text-red-600 font-semibold' : ''}>
+                                                {res.status === TestStatus.Passed ? 'Прошёл' : res.status === TestStatus.Failed ? 'Не прошёл' : ''}
                                             </span>
                                         </div>
                                         <p className="text-sm">Оценка: <b>{res.grade || '-'}</b></p>
@@ -739,10 +733,9 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
 };
 
-// Main Student View Component
 const StudentView: React.FC = () => {
     const { state, dispatch } = useAppContext();
-    const { currentUser, units, studentProgress, activeOnlineTestSession, teacherMessages, announcements, chats } = state; // FIX: get announcements from state
+    const { currentUser, units, studentProgress, activeOnlineTestSession, teacherMessages, announcements, chats } = state;
     const [view, setView] = useState<'dashboard' | 'round_flow' | 'online_test_lobby' | 'online_test_session' | 'grades' | 'chat'>('dashboard');
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
     const [selectedRound, setSelectedRound] = useState<Round | null>(null);
@@ -836,7 +829,6 @@ const StudentView: React.FC = () => {
                         {hasUnreadMessages && <span className="absolute -top-1 -right-2 w-2 h-2 bg-red-500 rounded-full"></span>}
                      </button>
                      <button onClick={() => dispatch({ type: 'LOGOUT' })} className="font-medium text-indigo-600 hover:text-indigo-500">Выйти</button>
-                     {/* FIX: This bell icon is for personal messages, which is correct. */}
                      {teacherMessages.length > 0 && 
                         <button onClick={() => setShowMessageModal(true)} className="relative">
                             <BellIcon className="w-6 h-6 text-slate-500 hover:text-indigo-600" />
@@ -873,7 +865,6 @@ const StudentView: React.FC = () => {
                 </div>
             )}
             
-            {/* FIX: Display new announcements from teacher */}
             {announcements?.active && (
                  <div className="bg-red-100 border-l-4 border-red-500 text-red-800 p-4 rounded-lg mb-6">
                     <p className="font-bold flex items-center gap-2"><ExclamationTriangleIcon className="w-5 h-5" /> Напоминание!</p>
@@ -887,7 +878,6 @@ const StudentView: React.FC = () => {
                     <p>{announcements.info}</p>
                 </div>
             )}
-
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {allUnitsToDisplay.map(unit => {
