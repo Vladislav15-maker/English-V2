@@ -329,7 +329,7 @@ const ResultsStage: React.FC<{ stageResults: { [key in StageType]?: StageResult 
 
 const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     const { state, dispatch } = useAppContext();
-    const { currentUser, activeOnlineTestSession } = state;
+const { currentUser, users, chats, presence } = state;
     const test = state.onlineTests.find((t: OnlineTest) => t.id === activeOnlineTestSession?.testId);
     const [timeLeft, setTimeLeft] = useState(test ? test.durationMinutes * 60 : 0);
 
