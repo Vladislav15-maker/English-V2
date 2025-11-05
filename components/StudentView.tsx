@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement } from '../types';
-// FIX: Исправлена опечатка UserGroup-Icon на UserGroupIcon
 import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
 import SecureInput from './common/SecureInput';
 import Modal from './common/Modal';
@@ -741,6 +740,8 @@ const StudentView: React.FC = () => {
     const [selectedRound, setSelectedRound] = useState<Round | null>(null);
     const [showMessageModal, setShowMessageModal] = useState(false);
     
+    const [seenMessages, setSeenMessages] = useState<string[]>([]);
+
     const progress = studentProgress[currentUser!.id] || {};
 
     const studentChats = useMemo(() => chats.filter(c => c.participants.some(p => p.userId === currentUser?.id)), [chats, currentUser]);
@@ -752,7 +753,14 @@ const StudentView: React.FC = () => {
             return !lastRead || lastMessage.timestamp > lastRead;
         });
     }, [studentChats, currentUser]);
-
+    
+    const hasUnseenTeacherMessages = useMemo(() => {
+        if (!teacherMessages || teacherMessages.length === 0) {
+            return false;
+        }
+        return teacherMessages.some(msg => !seenMessages.includes(msg.id));
+    }, [teacherMessages, seenMessages]);
+    
     const lastActiveAnnouncement = useMemo(() => {
         if (!announcements) return null;
         return [...announcements].filter(a => a.type === 'active').pop();
@@ -762,7 +770,14 @@ const StudentView: React.FC = () => {
         if (!announcements) return null;
         return [...announcements].filter(a => a.type === 'info').pop();
     }, [announcements]);
-
+    
+    const handleOpenMessages = () => {
+        setShowMessageModal(true);
+        if (teacherMessages) {
+            setSeenMessages(teacherMessages.map(msg => msg.id));
+        }
+    };
+    
     const handleSelectRound = (unit: Unit, round: Round) => {
         setSelectedUnit(unit);
         setSelectedRound(round);
@@ -840,12 +855,14 @@ const StudentView: React.FC = () => {
                      </button>
                      <button onClick={() => dispatch({ type: 'LOGOUT' })} className="font-medium text-indigo-600 hover:text-indigo-500">Выйти</button>
                      {teacherMessages && teacherMessages.length > 0 && 
-                        <button onClick={() => setShowMessageModal(true)} className="relative">
+                        <button onClick={handleOpenMessages} className="relative">
                             <BellIcon className="w-6 h-6 text-slate-500 hover:text-indigo-600" />
-                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                            </span>
+                            {hasUnseenTeacherMessages && (
+                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                                </span>
+                            )}
                         </button>
                      }
                 </div>

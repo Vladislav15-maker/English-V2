@@ -1,7 +1,7 @@
 import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback, useRef } from 'react';
-// FIX: Добавлен тип Announcement для новой структуры объявлений
 import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole, Announcement } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
+import Pusher from 'pusher-js';
 
 interface AppState {
   users: User[];
@@ -13,8 +13,7 @@ interface AppState {
   onlineTestResults: {[studentId: string]: OnlineTestResult[]};
   activeOnlineTestSession: OnlineTestSession | null;
   teacherMessages: TeacherMessage[];
-  // FIX: isTestReminderActive заменено на массив announcements для хранения истории
-  announcements: Announcement[]; 
+  announcements: Announcement[];
   chats: Chat[];
   presence: { [userId: string]: 'online' | number };
   error: string | null;
@@ -31,7 +30,6 @@ const initialState: AppState = {
   onlineTestResults: {},
   activeOnlineTestSession: null,
   teacherMessages: [],
-  // FIX: Начальное состояние теперь пустой массив
   announcements: [],
   chats: [],
   presence: {},
@@ -62,7 +60,6 @@ type Action =
   | { type: 'SEND_TEACHER_MESSAGE'; payload: string }
   | { type: 'UPDATE_TEACHER_MESSAGE'; payload: { messageId: string; newMessage: string } }
   | { type: 'DELETE_TEACHER_MESSAGE'; payload: { messageId: string } }
-  // FIX: Старый TOGGLE_TEST_REMINDER удален. Добавлены новые действия для объявлений.
   | { type: 'SEND_ANNOUNCEMENT'; payload: { type: 'active' | 'info', message: string } }
   | { type: 'DELETE_ANNOUNCEMENT'; payload: { announcementId: string } }
   | { type: 'UPDATE_WORD_IMAGE'; payload: { unitId: string; roundId: string; wordId: string; imageUrl: string } }
@@ -89,7 +86,6 @@ const AppContext = createContext<{
 
 const appReducer = (state: AppState, action: Action): AppState => {
     switch (action.type) {
-        // ... (Все case от LOGIN до GRADE_ONLINE_TEST остаются без изменений)
         case 'LOGIN': {
             const user = state.users.find(
                 (u) => u.login.toLowerCase() === action.payload.login.toLowerCase() && u.password === action.payload.password
@@ -189,7 +185,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state,
                 offlineTestResults: {
                     ...state.offlineTestResults,
-                    [studentId]: studentResults.filter(r => r.id !== resultId) // Simpler delete
+                    [studentId]: studentResults.filter(r => r.id !== resultId)
                 }
             };
         }
@@ -203,7 +199,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state,
                 onlineTestResults: {
                     ...state.onlineTestResults,
-                    [studentId]: studentResults.filter(r => r.id !== resultId) // Simpler delete
+                    [studentId]: studentResults.filter(r => r.id !== resultId)
                 }
             };
         }
@@ -238,7 +234,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                  const existingResult = newResults[student.studentId].find(r => r.id === session.id + student.studentId);
                  if (!existingResult) {
                      newResults[student.studentId].push({
-                        id: session.id + student.studentId, // Unique ID for this attempt
+                        id: session.id + student.studentId,
                         studentId: student.studentId,
                         testId: session.testId,
                         score,
@@ -252,15 +248,12 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, activeOnlineTestSession: null, onlineTestResults: newResults };
         }
 
-        // --- ИЗМЕНЕННЫЕ И НОВЫЕ ДЕЙСТВИЯ ДЛЯ СООБЩЕНИЙ И ОБЪЯВЛЕНИЙ ---
-        
         case 'SEND_TEACHER_MESSAGE': {
             const newMessage: TeacherMessage = {
                 id: `msg-${Date.now()}`,
                 message: action.payload,
                 timestamp: Date.now(),
             };
-            // Теперь это просто добавляет сообщение в массив, который будет сохранен в облаке
             return {
                 ...state,
                 teacherMessages: [...state.teacherMessages, newMessage],
@@ -287,7 +280,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
             };
         }
         
-        // FIX: Старый 'TOGGLE_TEST_REMINDER' удален и заменен на эту логику
         case 'SEND_ANNOUNCEMENT': {
             const newAnnouncement: Announcement = {
                 id: `ann-${Date.now()}`,
@@ -309,8 +301,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ),
             };
         }
-        
-        // --- ОСТАЛЬНЫЕ ДЕЙСТВИЯ БЕЗ ИЗМЕНЕНИЙ ---
         
         case 'ADD_UNIT': {
             const { unitName, isMistakeUnit, sourceTestId, sourceTestName } = action.payload;
@@ -466,6 +456,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const reloadStateFromCloud = useCallback(async () => {
+        console.log("Real-time update received! Reloading state...");
+        try {
+            const res = await fetch('/api/data');
+            if (!res.ok) return;
+            const data = await res.json();
+            const cloudState = data.record;
+            
+            dispatch({ type: 'SET_INITIAL_STATE', payload: { ...cloudState, isLoading: false } });
+        } catch (error) {
+            console.error("Failed to reload state for real-time update:", error);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!process.env.NEXT_PUBLIC_PUSHER_KEY || !process.env.NEXT_PUBLIC_PUSHER_CLUSTER) {
+            console.warn("Pusher keys are not defined. Real-time updates will be disabled.");
+            return;
+        }
+
+        const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
+            cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
+        });
+
+        const channel = pusher.subscribe('main-channel');
+
+        channel.bind('state-updated', () => {
+            reloadStateFromCloud();
+        });
+
+        return () => {
+            pusher.unsubscribe('main-channel');
+            pusher.disconnect();
+        };
+    }, [reloadStateFromCloud]);
+
     const saveStateToCloud = useCallback(() => {
         if (debounceTimer.current) {
             clearTimeout(debounceTimer.current);
@@ -482,8 +508,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(stateToSave),
-            }).catch(error => {
-                console.error("Failed to save state to cloud:", error);
+            })
+            .then(res => {
+                if(res.ok) {
+                    console.log("State saved, triggering real-time update...");
+                    fetch('/api/trigger-update', { method: 'POST' });
+                } else {
+                     throw new Error('Failed to save state');
+                }
+            })
+            .catch(error => {
+                console.error("Failed to save state and trigger update:", error);
                 dispatch({ type: 'SET_ERROR', payload: "Ошибка сохранения: не удалось подключиться к серверу." });
             });
         }, 1500);
@@ -504,7 +539,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                      }
 
                     console.log("Cloud data not found or invalid, initializing with defaults.");
-                    // FIX: Убеждаемся, что дефолтное состояние включает пустые массивы
                     const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [], teacherMessages: [], announcements: [], studentProgress: {}, offlineTestResults: {}, onlineTestResults: {} };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
                     
@@ -518,8 +552,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 const data = await res.json();
                 const cloudState = data.record;
-                
-                // FIX: Применяем дефолтные значения для новых полей, если их нет в облаке
+
                 const mergedState = {
                     ...initialState,
                     ...cloudState,
@@ -537,7 +570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     errorMessage = 'Ошибка конфигурации: проверьте ключи API в настройках Vercel.';
                 }
                 dispatch({ type: 'SET_ERROR', payload: errorMessage });
-                dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS } });
+                dispatch({ type: 'SET_INITIAL_STATE', payload: { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, announcements: [], teacherMessages: [] } });
             }
         };
 
