@@ -590,11 +590,12 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <div className="flex justify-between">
                                 <span className="font-semibold">
                                     {chat.participants
-                                        .filter((p: any) => p.userId !== currentUser?.id)
-                                        .map((p: any) =>
-                                            users.find(u => u.id === p.userId)?.name || 'Неизвестный'
-                                        )
-                                        .join(', ')}
+    .filter((p: any) => p.userId !== currentUser?.id)
+    .map((p: any) =>
+        users.find((u: any) => u.id === p.userId)?.name || 'Неизвестный'
+    )
+    .join(', ')}
+
                                 </span>
                                 <span className="text-xs text-gray-400">
                                     {chat.messages.length > 0
