@@ -549,18 +549,44 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
 }
 
+// --- Интерфейсы для чата ---
+interface ChatParticipant {
+    userId: string;
+    name: string;
+}
+
+interface ChatMessage {
+    text: string;
+    timestamp: number;
+    senderId: string;
+}
+
+interface Chat {
+    id: string;
+    name?: string;
+    isGroup?: boolean;
+    participants: ChatParticipant[];
+    messages: ChatMessage[];
+}
+
+// --- Компонент ---
 const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { state, dispatch } = useAppContext();
     const { currentUser, users, chats, presence } = state;
+
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [newMessage, setNewMessage] = useState('');
     const [showParticipantsModal, setShowParticipantsModal] = useState(false);
     const [readReceiptsInfo, setReadReceiptsInfo] = useState<ChatMessage | null>(null);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
+    // --- Исправлено: типы для c и p ---
     const userChats = useMemo(() =>
-        chats.filter(c => c.participants.some(p => p.userId === currentUser?.id))
-            .sort((a, b) => {
+        chats
+            .filter((c: Chat) =>
+                c.participants.some((p: ChatParticipant) => p.userId === currentUser?.id)
+            )
+            .sort((a: Chat, b: Chat) => {
                 const lastMsgA = a.messages[a.messages.length - 1]?.timestamp || 0;
                 const lastMsgB = b.messages[b.messages.length - 1]?.timestamp || 0;
                 return lastMsgB - lastMsgA;
@@ -568,7 +594,10 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         [chats, currentUser]
     );
 
-    const selectedChat = useMemo(() => userChats.find(c => c.id === selectedChatId), [userChats, selectedChatId]);
+    const selectedChat = useMemo(
+        () => userChats.find((c: Chat) => c.id === selectedChatId),
+        [userChats, selectedChatId]
+    );
 
     useEffect(() => {
         if (selectedChatId) {
@@ -583,18 +612,28 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
         if (newMessage.trim() && selectedChatId) {
-            dispatch({ type: 'SEND_MESSAGE', payload: { chatId: selectedChatId, text: newMessage } });
+            dispatch({
+                type: 'SEND_MESSAGE',
+                payload: { chatId: selectedChatId, text: newMessage },
+            });
             setNewMessage('');
         }
     };
 
     const getChatName = (chat: Chat) => {
         if (chat.isGroup && chat.name) return chat.name;
-        if (chat.isGroup) return chat.participants.filter(p => p.userId !== currentUser?.id).map(p => p.name).join(', ');
-        const otherUser = chat.participants.find(p => p.userId !== currentUser?.id);
+        if (chat.isGroup)
+            return chat.participants
+                .filter((p: ChatParticipant) => p.userId !== currentUser?.id)
+                .map(p => p.name)
+                .join(', ');
+        const otherUser = chat.participants.find(
+            (p: ChatParticipant) => p.userId !== currentUser?.id
+        );
         return otherUser?.name || 'Unknown User';
     };
-    
+};
+
     const getPresenceStatus = (userId: string) => {
         const status = presence[userId];
         if (status === 'online') return 'online';
