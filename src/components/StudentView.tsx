@@ -147,7 +147,7 @@ const WriteStage: React.FC<{ round: Round; onComplete: (result: StageResult) => 
         if (feedback) return;
         const studentAnswer = inputValue.trim().toLowerCase();
         const correctAnswer = currentWord.english.toLowerCase();
-        const alternatives = currentWord.alternatives?.map(a => a.toLowerCase()) || [];
+        const alternatives = currentWord.alternatives?.map((a: string) => a.toLowerCase()) || [];
         const isCorrect = studentAnswer === correctAnswer || alternatives.includes(studentAnswer);
 
         setFeedback({ status: isCorrect ? 'correct' : 'incorrect', word: currentWord.english });
@@ -330,7 +330,6 @@ const ResultsStage: React.FC<{ stageResults: { [key in StageType]?: StageResult 
 const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     const { state, dispatch } = useAppContext();
     const { currentUser, activeOnlineTestSession } = state;
-    // FIX: Явно указываем тип параметра 't', чтобы исправить ошибку TypeScript
     const test = state.onlineTests.find((t: OnlineTest) => t.id === activeOnlineTestSession?.testId);
     const [timeLeft, setTimeLeft] = useState(test ? test.durationMinutes * 60 : 0);
 
@@ -367,7 +366,7 @@ const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => 
         const currentWord = test.words[currentWordIndex];
         const studentAnswer = inputValue.trim().toLowerCase();
         const correctAnswer = currentWord.english.toLowerCase();
-        const alternatives = currentWord.alternatives?.map(a => a.toLowerCase()) || [];
+        const alternatives = currentWord.alternatives?.map((a: string) => a.toLowerCase()) || [];
         const isCorrect = studentAnswer === correctAnswer || alternatives.includes(studentAnswer);
 
         const newAnswer: StudentAnswer = { wordId: currentWord.id, studentAnswer: inputValue.trim(), correct: isCorrect };
