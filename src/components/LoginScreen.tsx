@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { LogoIcon } from './common/Icons';
@@ -12,14 +11,17 @@ const LoginScreen: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
+
+    // Отправляем успешный вход
     dispatch({
-  type: 'LOGIN_SUCCESS',
-  payload: {
-    id: '1',
-    name: login,
-    role: 'student',
-  },
-});
+      type: 'LOGIN_SUCCESS',
+      payload: {
+        id: '1',
+        name: login,
+        role: 'student',
+      },
+    });
+  }; // ← ЭТОЙ СКОБКИ НЕ ХВАТАЛО ❗
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4">
@@ -30,15 +32,17 @@ const LoginScreen: React.FC = () => {
             <h2 className="text-3xl font-bold text-slate-800">Добро пожаловать</h2>
             <p className="text-slate-500">Войдите в свой аккаунт EnglishCourse</p>
           </div>
-          
+
           {isLoading ? (
             <div className="text-center text-slate-500">
-                <p>Загрузка данных...</p>
+              <p>Загрузка данных...</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label htmlFor="login" className="block text-sm font-medium text-slate-700">Логин</label>
+                <label htmlFor="login" className="block text-sm font-medium text-slate-700">
+                  Логин
+                </label>
                 <input
                   id="login"
                   type="text"
@@ -51,7 +55,9 @@ const LoginScreen: React.FC = () => {
                 />
               </div>
               <div>
-                <label htmlFor="password"  className="block text-sm font-medium text-slate-700">Пароль</label>
+                <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+                  Пароль
+                </label>
                 <input
                   id="password"
                   type="password"
@@ -63,7 +69,13 @@ const LoginScreen: React.FC = () => {
                   disabled={isLoading}
                 />
               </div>
-              {error && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</p>}
+
+              {error && (
+                <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">
+                  {error}
+                </p>
+              )}
+
               <div>
                 <button
                   type="submit"
