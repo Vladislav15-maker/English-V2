@@ -481,7 +481,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div>
                     <h3 className="text-xl font-bold mb-3">Оценки за юниты</h3>
                     <div className="bg-white p-4 rounded-lg shadow space-y-2">
-                        {units.filter(u => !u.isMistakeUnit && progress[u.id] && typeof progress[u.id].grade !== 'undefined').length > 0 ? units.filter(u => !u.isMistakeUnit).map(unit => {
+                        {units.filter((u: Unit) => !u.isMistakeUnit && progress[u.id] && typeof progress[u.id].grade !== 'undefined').length > 0 ? units.filter((u: Unit) => !u.isMistakeUnit).map(unit => {
                             const unitProgress = progress[unit.id];
                             if (!unitProgress || typeof unitProgress.grade === 'undefined') return null;
                             return (
