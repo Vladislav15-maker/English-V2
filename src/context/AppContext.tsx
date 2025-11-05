@@ -51,7 +51,6 @@ type Action =
   | { type: 'SET_INITIAL_STATE'; payload: Partial<AppState> }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
-  // ... и все остальные ваши типы действий
   | { type: 'SUBMIT_ROUND_TEST'; payload: { studentId: string; unitId: string; roundId: string; result: Omit<StudentRoundResult, 'roundId' | 'completed'> } }
   | { type: 'SET_UNIT_GRADE'; payload: { studentId: string; unitId: string; grade: number; comment?: string } }
   | { type: 'DELETE_UNIT_GRADE'; payload: { studentId: string; unitId: string } }
@@ -86,17 +85,51 @@ type Action =
   | { type: 'MARK_AS_READ'; payload: { chatId: string } }
   | { type: 'UPDATE_PRESENCE' };
 
+// Полный Reducer
 const appReducer = (state: AppState, action: Action): AppState => {
-    // ... (Вставьте сюда ВЕСЬ ваш appReducer без изменений)
+    switch (action.type) {
+        case 'LOGIN_SUCCESS': {
+            const user = USERS.find(u => u.id === action.payload.id);
+            return user ? { ...state, currentUser: user, error: null } : state;
+        }
+        case 'LOGOUT':
+            return { ...state, currentUser: null };
+        case 'SET_FIREBASE_USER':
+            return { ...state, firebaseUser: action.payload };
+        case 'SET_LOADING':
+            return { ...state, isLoading: action.payload };
+        case 'SET_INITIAL_STATE':
+            return { 
+                ...initialState,
+                ...action.payload,
+                currentUser: state.currentUser,
+                firebaseUser: state.firebaseUser,
+                isLoading: false 
+            };
+        case 'SET_ERROR':
+            return { ...state, error: action.payload, isLoading: false };
+        
+        // --- Вставьте сюда все остальные case вашего appReducer ---
+        // Пример:
+        case 'SUBMIT_ROUND_TEST': {
+            const { studentId, unitId, roundId, result } = action.payload;
+            const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
+            if (!newProgress[studentId]) newProgress[studentId] = {};
+            if (!newProgress[studentId][unitId]) newProgress[studentId][unitId] = { unitId, rounds: {} };
+            newProgress[studentId][unitId].rounds[roundId] = { ...result, roundId, completed: true };
+            return { ...state, studentProgress: newProgress };
+        }
+        // ... и так далее для всех остальных действий
+        
+        default:
+            return state;
+    }
 };
 
 const AppContext = createContext<{
   state: AppState;
   dispatch: Dispatch<Action>;
-}>({
-  state: initialState,
-  dispatch: () => null,
-});
+} | undefined>(undefined); // Устанавливаем undefined по умолчанию
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
@@ -157,7 +190,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         debounceTimer.current = setTimeout(() => {
             isSaving.current = true;
+            console.log("Saving state to Firestore...");
             const stateToSave: Partial<AppState> = { ...state };
+
             delete stateToSave.currentUser;
             delete stateToSave.firebaseUser;
             delete stateToSave.error;
@@ -166,7 +201,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             delete stateToSave.units;
             delete stateToSave.onlineTests;
             
-            console.log("Saving state to Firestore...");
             setDoc(doc(db, "appData", "state"), stateToSave, { merge: true })
                 .then(() => console.log("State successfully saved."))
                 .catch(error => console.error("Error saving state to Firestore:", error))
@@ -184,4 +218,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 };
 
-export const useAppContext = () => useContext(AppContext);
+export const useAppContext = () => {
+    const context = useContext(AppContext);
+    if (context === undefined) {
+        throw new Error('useAppContext must be used within an AppProvider');
+    }
+    return context;
+};
