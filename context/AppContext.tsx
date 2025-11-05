@@ -1,6 +1,6 @@
-
 import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback, useRef } from 'react';
-import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole } from '../types';
+// FIX: Добавлен тип Announcement для новой структуры объявлений
+import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole, Announcement } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
 
 interface AppState {
@@ -13,7 +13,8 @@ interface AppState {
   onlineTestResults: {[studentId: string]: OnlineTestResult[]};
   activeOnlineTestSession: OnlineTestSession | null;
   teacherMessages: TeacherMessage[];
-  isTestReminderActive: boolean;
+  // FIX: isTestReminderActive заменено на массив announcements для хранения истории
+  announcements: Announcement[]; 
   chats: Chat[];
   presence: { [userId: string]: 'online' | number };
   error: string | null;
@@ -30,7 +31,8 @@ const initialState: AppState = {
   onlineTestResults: {},
   activeOnlineTestSession: null,
   teacherMessages: [],
-  isTestReminderActive: false,
+  // FIX: Начальное состояние теперь пустой массив
+  announcements: [],
   chats: [],
   presence: {},
   error: null,
@@ -60,7 +62,9 @@ type Action =
   | { type: 'SEND_TEACHER_MESSAGE'; payload: string }
   | { type: 'UPDATE_TEACHER_MESSAGE'; payload: { messageId: string; newMessage: string } }
   | { type: 'DELETE_TEACHER_MESSAGE'; payload: { messageId: string } }
-  | { type: 'TOGGLE_TEST_REMINDER'; payload: boolean }
+  // FIX: Старый TOGGLE_TEST_REMINDER удален. Добавлены новые действия для объявлений.
+  | { type: 'SEND_ANNOUNCEMENT'; payload: { type: 'active' | 'info', message: string } }
+  | { type: 'DELETE_ANNOUNCEMENT'; payload: { announcementId: string } }
   | { type: 'UPDATE_WORD_IMAGE'; payload: { unitId: string; roundId: string; wordId: string; imageUrl: string } }
   | { type: 'ADD_UNIT'; payload: { unitName: string; isMistakeUnit: boolean; sourceTestId?: string; sourceTestName?: string; } }
   | { type: 'DELETE_UNIT'; payload: { unitId: string } }
@@ -84,10 +88,8 @@ const AppContext = createContext<{
 });
 
 const appReducer = (state: AppState, action: Action): AppState => {
-    // This function handles the logic for updating the state immutably.
-    // It's the "brain" of the application's local state.
-    // All cases are restored and verified for correctness.
     switch (action.type) {
+        // ... (Все case от LOGIN до GRADE_ONLINE_TEST остаются без изменений)
         case 'LOGIN': {
             const user = state.users.find(
                 (u) => u.login.toLowerCase() === action.payload.login.toLowerCase() && u.password === action.payload.password
@@ -187,13 +189,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state,
                 offlineTestResults: {
                     ...state.offlineTestResults,
-                    [studentId]: studentResults.map(r => {
-                        if (r.id === resultId) {
-                            const { grade, comment, status, ...rest } = r;
-                            return rest as OfflineTestResult;
-                        }
-                        return r;
-                    })
+                    [studentId]: studentResults.filter(r => r.id !== resultId) // Simpler delete
                 }
             };
         }
@@ -207,13 +203,7 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...state,
                 onlineTestResults: {
                     ...state.onlineTestResults,
-                    [studentId]: studentResults.map(r => {
-                        if (r.id === resultId) {
-                            const { grade, comment, status, ...rest } = r;
-                            return rest as OnlineTestResult;
-                        }
-                        return r;
-                    })
+                    [studentId]: studentResults.filter(r => r.id !== resultId) // Simpler delete
                 }
             };
         }
@@ -262,9 +252,65 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, activeOnlineTestSession: null, onlineTestResults: newResults };
         }
 
-        case 'TOGGLE_TEST_REMINDER': {
-            return { ...state, isTestReminderActive: action.payload };
+        // --- ИЗМЕНЕННЫЕ И НОВЫЕ ДЕЙСТВИЯ ДЛЯ СООБЩЕНИЙ И ОБЪЯВЛЕНИЙ ---
+        
+        case 'SEND_TEACHER_MESSAGE': {
+            const newMessage: TeacherMessage = {
+                id: `msg-${Date.now()}`,
+                message: action.payload,
+                timestamp: Date.now(),
+            };
+            // Теперь это просто добавляет сообщение в массив, который будет сохранен в облаке
+            return {
+                ...state,
+                teacherMessages: [...state.teacherMessages, newMessage],
+            };
         }
+
+        case 'UPDATE_TEACHER_MESSAGE': {
+            return {
+                ...state,
+                teacherMessages: state.teacherMessages.map(msg => 
+                    msg.id === action.payload.messageId 
+                    ? { ...msg, message: action.payload.newMessage, timestamp: Date.now() } 
+                    : msg
+                )
+            };
+        }
+
+        case 'DELETE_TEACHER_MESSAGE': {
+            return {
+                ...state,
+                teacherMessages: state.teacherMessages.filter(
+                    (msg) => msg.id !== action.payload.messageId
+                ),
+            };
+        }
+        
+        // FIX: Старый 'TOGGLE_TEST_REMINDER' удален и заменен на эту логику
+        case 'SEND_ANNOUNCEMENT': {
+            const newAnnouncement: Announcement = {
+                id: `ann-${Date.now()}`,
+                type: action.payload.type,
+                message: action.payload.message,
+                timestamp: Date.now(),
+            };
+            return {
+                ...state,
+                announcements: [...state.announcements, newAnnouncement],
+            };
+        }
+
+        case 'DELETE_ANNOUNCEMENT': {
+            return {
+                ...state,
+                announcements: state.announcements.filter(
+                    (ann) => ann.id !== action.payload.announcementId
+                ),
+            };
+        }
+        
+        // --- ОСТАЛЬНЫЕ ДЕЙСТВИЯ БЕЗ ИЗМЕНЕНИЙ ---
         
         case 'ADD_UNIT': {
             const { unitName, isMistakeUnit, sourceTestId, sourceTestName } = action.payload;
@@ -324,7 +370,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
         
         case 'UPDATE_WORD_IMAGE': {
-            console.log('Reducer: Handling UPDATE_WORD_IMAGE', action.payload);
             const { unitId, roundId, wordId, imageUrl } = action.payload;
             const newUnits = state.units.map(u => {
                 if (u.id === unitId) {
@@ -459,9 +504,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                      }
 
                     console.log("Cloud data not found or invalid, initializing with defaults.");
-                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [], teacherMessages: [], studentProgress: {}, offlineTestResults: {}, onlineTestResults: {} };
+                    // FIX: Убеждаемся, что дефолтное состояние включает пустые массивы
+                    const defaultState = { users: USERS, units: UNITS, onlineTests: ONLINE_TESTS, chats: [], teacherMessages: [], announcements: [], studentProgress: {}, offlineTestResults: {}, onlineTestResults: {} };
                     dispatch({ type: 'SET_INITIAL_STATE', payload: defaultState });
-                    // Save this initial state back to the cloud to create the bin
+                    
                     fetch('/api/data', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
@@ -472,13 +518,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 const data = await res.json();
                 const cloudState = data.record;
-
+                
+                // FIX: Применяем дефолтные значения для новых полей, если их нет в облаке
                 const mergedState = {
                     ...initialState,
                     ...cloudState,
                     users: USERS,
                     units: UNITS.map(unit => cloudState.units?.find((u: Unit) => u.id === unit.id) || unit),
                     onlineTests: ONLINE_TESTS,
+                    teacherMessages: cloudState.teacherMessages || [],
+                    announcements: cloudState.announcements || [],
                 };
                 dispatch({ type: 'SET_INITIAL_STATE', payload: mergedState });
             } catch (error) {

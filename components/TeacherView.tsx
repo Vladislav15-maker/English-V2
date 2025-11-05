@@ -1,13 +1,11 @@
-// FIX: Removed duplicated imports, types and merged component definitions to resolve "Duplicate identifier" errors.
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage } from '../types';
+import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage, Announcement } from '../types';
 import Modal from './common/Modal';
-import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
+import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroup-Icon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
 
 type TeacherViewMode = 'dashboard' | 'student_detail' | 'offline_grader' | 'online_test_manager' | 'online_test_monitor' | 'online_test_history' | 'online_test_results' | 'content_editor' | 'chat';
 
-// ... (Components WordItemEditor, AddWordForm, AnswerReviewModal, ChatInterface are unchanged from previous response)
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
@@ -468,7 +466,7 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
 const TeacherView: React.FC = () => {
     const { state, dispatch } = useAppContext();
-    const { currentUser, users, studentProgress, offlineTestResults, activeOnlineTestSession, onlineTests, onlineTestResults, announcements } = state;
+    const { currentUser, users, studentProgress, offlineTestResults, activeOnlineTestSession, onlineTests, onlineTestResults, announcements, teacherMessages } = state;
     const [view, setView] = useState<TeacherViewMode>('dashboard');
     const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
     const [editingTest, setEditingTest] = useState<OfflineTestResult | null>(null);
@@ -489,14 +487,12 @@ const TeacherView: React.FC = () => {
     const [newUnitSourceTestId, setNewUnitSourceTestId] = useState('');
     const [newRoundName, setNewRoundName] = useState('');
 
+    const [announcementType, setAnnouncementType] = useState<'active' | 'info'>('info');
+    const [announcementMessage, setAnnouncementMessage] = useState('');
+
     const [message, setMessage] = useState('');
     const [showMessageHistory, setShowMessageHistory] = useState(false);
-    const [editingMessage, setEditingMessage] = useState<TeacherMessage | null>(null);
-    const [editedMessageText, setEditedMessageText] = useState('');
     
-    const [activeReminderText, setActiveReminderText] = useState(announcements?.active || '');
-    const [generalInfoText, setGeneralInfoText] = useState(announcements?.info || '');
-
     const [reviewingRoundResult, setReviewingRoundResult] = useState<StudentRoundResult | null>(null);
     const [gradeInput, setGradeInput] = useState<{ [id: string]: string }>({});
     const [commentInput, setCommentInput] = useState<{ [id: string]: string }>({});
@@ -572,39 +568,22 @@ const TeacherView: React.FC = () => {
         setMessage('');
     };
 
-    const handleSaveAnnouncement = (type: 'active' | 'info') => {
-        const payload = {
-            active: type === 'active' ? activeReminderText : announcements?.active,
-            info: type === 'info' ? generalInfoText : announcements?.info,
-        };
-        dispatch({ type: 'SET_ANNOUNCEMENT', payload });
-    };
-
-    const handleClearAnnouncement = (type: 'active' | 'info') => {
-        if (type === 'active') setActiveReminderText('');
-        if (type === 'info') setGeneralInfoText('');
-        const payload = {
-            active: type === 'active' ? null : announcements?.active,
-            info: type === 'info' ? null : announcements?.info,
-        };
-        dispatch({ type: 'SET_ANNOUNCEMENT', payload });
-    };
-
-    const handleEditMessage = (msg: TeacherMessage) => {
-        setEditingMessage(msg);
-        setEditedMessageText(msg.message);
-    };
-
-    const handleSaveEditedMessage = (messageId: string) => {
-        if (!editedMessageText.trim()) return;
-        dispatch({ type: 'UPDATE_TEACHER_MESSAGE', payload: { messageId, newMessage: editedMessageText } });
-        setEditingMessage(null);
-        setEditedMessageText('');
-    };
-
     const handleDeleteMessage = (messageId: string) => {
-        onConfirm("Вы уверены, что хотите удалить это сообщение?", () => {
+        onConfirm("Вы уверены, что хотите удалить это личное сообщение?", () => {
             dispatch({ type: 'DELETE_TEACHER_MESSAGE', payload: { messageId } });
+        });
+    };
+
+    const handleSendAnnouncement = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!announcementMessage.trim()) return;
+        dispatch({ type: 'SEND_ANNOUNCEMENT', payload: { type: announcementType, message: announcementMessage } });
+        setAnnouncementMessage('');
+    };
+
+    const handleDeleteAnnouncement = (announcementId: string) => {
+        onConfirm("Вы уверены, что хотите удалить это объявление из истории?", () => {
+            dispatch({ type: 'DELETE_ANNOUNCEMENT', payload: { announcementId } });
         });
     };
 
@@ -706,33 +685,40 @@ const TeacherView: React.FC = () => {
             
             <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg">
                 <h3 className="text-lg font-bold flex items-center gap-2 mb-4"><MegaphoneIcon className="w-6 h-6 text-indigo-500"/> Центр объявлений для учеников</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
-                         <label className="font-bold text-red-800 flex items-center gap-2"><ExclamationTriangleIcon className="w-5 h-5"/> Активное напоминание (красный блок)</label>
-                         <textarea 
-                            value={activeReminderText} 
-                            onChange={(e) => setActiveReminderText(e.target.value)} 
-                            placeholder="Например: Не забудьте подготовиться к тесту в пятницу!" 
-                            className="w-full p-2 border rounded-lg mt-2 h-24"
-                        ></textarea>
-                        <div className="flex gap-2 mt-2">
-                            <button onClick={() => handleSaveAnnouncement('active')} className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-red-600">Сохранить</button>
-                            <button onClick={() => handleClearAnnouncement('active')} className="bg-slate-400 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-slate-500">Очистить</button>
-                        </div>
+                
+                <form onSubmit={handleSendAnnouncement} className="bg-slate-50 p-4 rounded-lg border-2 border-dashed mb-6">
+                    <h4 className="font-bold mb-2">Создать новое объявление</h4>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <select value={announcementType} onChange={e => setAnnouncementType(e.target.value as any)} className="p-2 border rounded-lg bg-white">
+                            <option value="info">Общее объявление (синий блок)</option>
+                            <option value="active">Срочное напоминание (красный блок)</option>
+                        </select>
+                        <input 
+                            value={announcementMessage} 
+                            onChange={e => setAnnouncementMessage(e.target.value)} 
+                            placeholder="Введите текст объявления..." 
+                            className="flex-grow p-2 border rounded-lg" 
+                            required
+                        />
+                        <button type="submit" className="px-4 py-2 rounded-lg text-white font-semibold bg-indigo-600 hover:bg-indigo-700">Отправить</button>
                     </div>
-                    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
-                         <label className="font-bold text-blue-800 flex items-center gap-2"><InformationCircleIcon className="w-5 h-5"/> Общее объявление (синий блок)</label>
-                         <textarea 
-                            value={generalInfoText} 
-                            onChange={(e) => setGeneralInfoText(e.target.value)} 
-                            placeholder="Например: Внимание, на следующей неделе занятия начнутся в 10:00." 
-                            className="w-full p-2 border rounded-lg mt-2 h-24"
-                        ></textarea>
-                        <div className="flex gap-2 mt-2">
-                            <button onClick={() => handleSaveAnnouncement('info')} className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-600">Сохранить</button>
-                            <button onClick={() => handleClearAnnouncement('info')} className="bg-slate-400 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-slate-500">Очистить</button>
+                </form>
+
+                <h4 className="font-bold mb-2">История объявлений</h4>
+                <div className="space-y-3 max-h-60 overflow-y-auto p-1">
+                    {announcements && announcements.length > 0 ? [...announcements].reverse().map(ann => (
+                        <div key={ann.id} className={`p-3 rounded-lg flex justify-between items-start ${ann.type === 'active' ? 'bg-red-50 border-l-4 border-red-400' : 'bg-blue-50 border-l-4 border-blue-400'}`}>
+                            <div>
+                                <p>{ann.message}</p>
+                                <p className="text-xs text-slate-500 mt-1">{new Date(ann.timestamp).toLocaleString()}</p>
+                            </div>
+                            <button onClick={() => handleDeleteAnnouncement(ann.id)} className="text-red-500 hover:text-red-700 ml-4 flex-shrink-0">
+                                <TrashIcon className="w-5 h-5"/>
+                            </button>
                         </div>
-                    </div>
+                    )) : (
+                        <p className="text-slate-500">История объявлений пуста.</p>
+                    )}
                 </div>
             </div>
 
@@ -740,41 +726,26 @@ const TeacherView: React.FC = () => {
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="text-lg font-bold flex items-center gap-2"><MegaphoneIcon className="w-6 h-6 text-slate-500"/> Личные сообщения (с колокольчиком)</h3>
                     <button onClick={() => setShowMessageHistory(true)} className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
-                        <ArchiveBoxIcon className="w-5 h-5" /> История сообщений
+                        <ArchiveBoxIcon className="w-5 h-5" /> История
                     </button>
                 </div>
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Написать сообщение всем ученикам..." className="w-full p-2 border rounded-lg mb-2"></textarea>
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Это сообщение увидят все ученики и у них появится колокольчик..." className="w-full p-2 border rounded-lg mb-2"></textarea>
                  <button onClick={handleSendMessage} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Отправить</button>
             </div>
 
-            <Modal isVisible={showMessageHistory} onClose={() => setShowMessageHistory(false)} title="История сообщений">
+            <Modal isVisible={showMessageHistory} onClose={() => setShowMessageHistory(false)} title="История личных сообщений">
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {[...state.teacherMessages].reverse().map(msg => (
-                        <div key={msg.id} className="p-3 bg-slate-100 rounded-lg">
-                            {editingMessage?.id === msg.id ? (
-                                <div>
-                                    <textarea 
-                                        value={editedMessageText}
-                                        onChange={(e) => setEditedMessageText(e.target.value)}
-                                        className="w-full p-2 border rounded-lg mb-2"
-                                    />
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleSaveEditedMessage(msg.id)} className="px-3 py-1 bg-green-500 text-white rounded">Сохранить</button>
-                                        <button onClick={() => setEditingMessage(null)} className="px-3 py-1 bg-slate-400 text-white rounded">Отмена</button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div>
-                                    <p>{msg.message}</p>
-                                    <p className="text-xs text-slate-500 text-right mt-1">{new Date(msg.timestamp).toLocaleString()}</p>
-                                    <div className="flex gap-2 justify-end mt-2">
-                                        <button onClick={() => handleEditMessage(msg)} className="text-blue-500"><PencilIcon className="w-4 h-4" /></button>
-                                        <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-500"><TrashIcon className="w-4 h-4" /></button>
-                                    </div>
-                                </div>
-                            )}
+                    {teacherMessages && teacherMessages.length > 0 ? [...teacherMessages].reverse().map(msg => (
+                        <div key={msg.id} className="p-3 bg-slate-100 rounded-lg flex justify-between items-start">
+                            <div>
+                                <p>{msg.message}</p>
+                                <p className="text-xs text-slate-500 text-left mt-1">{new Date(msg.timestamp).toLocaleString()}</p>
+                            </div>
+                             <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-500 hover:text-red-700 ml-4 flex-shrink-0">
+                                <TrashIcon className="w-5 h-5"/>
+                            </button>
                         </div>
-                    ))}
+                    )) : <p>Нет отправленных сообщений.</p>}
                 </div>
             </Modal>
         </>

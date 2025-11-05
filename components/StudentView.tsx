@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
-import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage } from '../types';
+import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement } from '../types';
 import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
 import SecureInput from './common/SecureInput';
 import Modal from './common/Modal';
 
-// ... (Components RoundFlow, LearnStage, useTestStage, WriteStage, ChoiceStage, ResultsStage, OnlineTestSession, GradesView, ChatInterface are unchanged from previous response)
 type Stage = 'learn' | 'write' | 'choice_text' | 'choice_image' | 'results';
 
 const RoundFlow: React.FC<{ unit: Unit; round: Round; onBack: () => void }> = ({ unit, round, onBack }) => {
@@ -533,8 +532,8 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                                     <div key={res.id} className="border-b last:border-b-0 p-3">
                                         <div className="flex justify-between items-center">
                                             <p className="font-semibold">{res.testName}</p>
-                                            <span className={res.status === TestStatus.Passed ? 'text-green-600 font-semibold' : res.status === TestStatus.Failed ? 'text-red-600 font-semibold' : ''}>
-                                                {res.status === TestStatus.Passed ? 'Прошёл' : res.status === TestStatus.Failed ? 'Не прошёл' : ''}
+                                            <span className={res.status === TestStatus.Passed ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                                                {res.status === TestStatus.Passed ? 'Прошёл' : 'Не прошёл'}
                                             </span>
                                         </div>
                                         <p className="text-sm">Оценка: <b>{res.grade || '-'}</b></p>
@@ -752,6 +751,16 @@ const StudentView: React.FC = () => {
             return !lastRead || lastMessage.timestamp > lastRead;
         });
     }, [studentChats, currentUser]);
+    
+    const lastActiveAnnouncement = useMemo(() => {
+        if (!announcements) return null;
+        return [...announcements].filter(a => a.type === 'active').pop();
+    }, [announcements]);
+
+    const lastInfoAnnouncement = useMemo(() => {
+        if (!announcements) return null;
+        return [...announcements].filter(a => a.type === 'info').pop();
+    }, [announcements]);
 
     const handleSelectRound = (unit: Unit, round: Round) => {
         setSelectedUnit(unit);
@@ -829,7 +838,7 @@ const StudentView: React.FC = () => {
                         {hasUnreadMessages && <span className="absolute -top-1 -right-2 w-2 h-2 bg-red-500 rounded-full"></span>}
                      </button>
                      <button onClick={() => dispatch({ type: 'LOGOUT' })} className="font-medium text-indigo-600 hover:text-indigo-500">Выйти</button>
-                     {teacherMessages.length > 0 && 
+                     {teacherMessages && teacherMessages.length > 0 && 
                         <button onClick={() => setShowMessageModal(true)} className="relative">
                             <BellIcon className="w-6 h-6 text-slate-500 hover:text-indigo-600" />
                             <span className="absolute -top-1 -right-1 flex h-3 w-3">
@@ -865,17 +874,17 @@ const StudentView: React.FC = () => {
                 </div>
             )}
             
-            {announcements?.active && (
+            {lastActiveAnnouncement && (
                  <div className="bg-red-100 border-l-4 border-red-500 text-red-800 p-4 rounded-lg mb-6">
                     <p className="font-bold flex items-center gap-2"><ExclamationTriangleIcon className="w-5 h-5" /> Напоминание!</p>
-                    <p>{announcements.active}</p>
+                    <p>{lastActiveAnnouncement.message}</p>
                 </div>
             )}
 
-            {announcements?.info && (
+            {lastInfoAnnouncement && (
                  <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 rounded-lg mb-6">
                     <p className="font-bold flex items-center gap-2"><InformationCircleIcon className="w-5 h-5" /> Объявление</p>
-                    <p>{announcements.info}</p>
+                    <p>{lastInfoAnnouncement.message}</p>
                 </div>
             )}
 
@@ -925,7 +934,7 @@ const StudentView: React.FC = () => {
 
             <Modal isVisible={showMessageModal} onClose={() => setShowMessageModal(false)} title="Сообщения от учителя">
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {teacherMessages.length > 0 ? [...teacherMessages].reverse().map(msg => (
+                    {teacherMessages && teacherMessages.length > 0 ? [...teacherMessages].reverse().map(msg => (
                         <div key={msg.id} className="p-3 bg-slate-100 rounded-lg">
                             <p>{msg.message}</p>
                             <p className="text-xs text-slate-500 text-right mt-1">{new Date(msg.timestamp).toLocaleString()}</p>
