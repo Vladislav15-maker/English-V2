@@ -3,8 +3,7 @@ import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineT
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
-// --- НАЧАЛО БЛОКА, КОТОРЫЙ БЫЛ ПРОПУЩЕН ---
-
+// Интерфейс состояния
 interface AppState {
   users: User[];
   units: Unit[];
@@ -22,6 +21,7 @@ interface AppState {
   isLoading: boolean;
 }
 
+// Начальное состояние
 const initialState: AppState = {
   users: USERS,
   units: UNITS,
@@ -39,6 +39,7 @@ const initialState: AppState = {
   isLoading: true,
 };
 
+// Типы действий
 type Action =
   | { type: 'LOGIN'; payload: { login: string; password: string } }
   | { type: 'LOGOUT' }
@@ -244,3 +245,385 @@ const appReducer = (state: AppState, action: Action): AppState => {
                         timeTaken,
                         timestamp: Date.now()
                      });
+                 }
+             });
+
+            return { ...state, activeOnlineTestSession: null, onlineTestResults: newResults };
+        }
+
+        case 'SEND_TEACHER_MESSAGE': {
+            const newMessage: TeacherMessage = {
+                id: `msg-${Date.now()}`,
+                message: action.payload,
+                timestamp: Date.now(),
+            };
+            return {
+                ...state,
+                teacherMessages: [...state.teacherMessages, newMessage],
+            };
+        }
+
+        case 'UPDATE_TEACHER_MESSAGE': {
+            return {
+                ...state,
+                teacherMessages: state.teacherMessages.map(msg => 
+                    msg.id === action.payload.messageId 
+                    ? { ...msg, message: action.payload.newMessage, timestamp: Date.now() } 
+                    : msg
+                )
+            };
+        }
+
+        case 'DELETE_TEACHER_MESSAGE': {
+            return {
+                ...state,
+                teacherMessages: state.teacherMessages.filter(
+                    (msg) => msg.id !== action.payload.messageId
+                ),
+            };
+        }
+        
+        case 'SEND_ANNOUNCEMENT': {
+            const newAnnouncement: Announcement = {
+                id: `ann-${Date.now()}`,
+                type: action.payload.type,
+                message: action.payload.message,
+                timestamp: Date.now(),
+            };
+            return {
+                ...state,
+                announcements: [...state.announcements, newAnnouncement],
+            };
+        }
+
+        case 'DELETE_ANNOUNCEMENT': {
+            return {
+                ...state,
+                announcements: state.announcements.filter(
+                    (ann) => ann.id !== action.payload.announcementId
+                ),
+            };
+        }
+        
+        case 'ADD_UNIT': {
+            const { unitName, isMistakeUnit, sourceTestId, sourceTestName } = action.payload;
+            const newUnit: Unit = {
+                id: `unit-${Date.now()}`,
+                name: unitName,
+                rounds: [],
+                isMistakeUnit,
+                sourceTestId,
+                sourceTestName,
+            };
+            return { ...state, units: [...state.units, newUnit] };
+        }
+        
+        case 'DELETE_UNIT': {
+            return { ...state, units: state.units.filter(u => u.id !== action.payload.unitId) };
+        }
+
+        case 'ADD_ROUND': {
+            const { unitId, roundName } = action.payload;
+            const newRound: Round = { id: `round-${Date.now()}`, name: roundName, words: [] };
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? { ...u, rounds: [...u.rounds, newRound] } : u)
+            };
+        }
+
+        case 'DELETE_ROUND': {
+            const { unitId, roundId } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? { ...u, rounds: u.rounds.filter(r => r.id !== roundId) } : u)
+            };
+        }
+
+        case 'ADD_WORD_TO_ROUND': {
+            const { unitId, roundId, word } = action.payload;
+            const newWord: Word = { ...word, id: `word-${Date.now()}` };
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? { ...r, words: [...r.words, newWord] } : r)
+                } : u)
+            };
+        }
+
+        case 'DELETE_WORD': {
+            const { unitId, roundId, wordId } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? { ...r, words: r.words.filter(w => w.id !== wordId) } : r)
+                } : u)
+            };
+        }
+        
+        case 'UPDATE_WORD_IMAGE': {
+            const { unitId, roundId, wordId, imageUrl } = action.payload;
+            const newUnits = state.units.map(u => {
+                if (u.id === unitId) {
+                    return {
+                        ...u,
+                        rounds: u.rounds.map(r => {
+                            if (r.id === roundId) {
+                                return {
+                                    ...r,
+                                    words: r.words.map(w => w.id === wordId ? { ...w, image: imageUrl } : w)
+                                };
+                            }
+                            return r;
+                        })
+                    };
+                }
+                return u;
+            });
+            return { ...state, units: newUnits };
+        }
+
+        case 'CREATE_CHAT': {
+            if (!state.currentUser) return state;
+            const allParticipantIds = Array.from(new Set([...action.payload.participantIds, state.currentUser.id]));
+            if (!action.payload.isGroup) {
+                const existingChat = state.chats.find(chat =>
+                    !chat.isGroup &&
+                    chat.participants.length === allParticipantIds.length &&
+                    chat.participants.every(p => allParticipantIds.includes(p.userId))
+                );
+                if (existingChat) return state;
+            }
+            const newChat: Chat = {
+                id: `chat-${Date.now()}`,
+                participants: allParticipantIds.map(userId => {
+                    const user = state.users.find(u => u.id === userId);
+                    return { userId: userId, name: user?.name || 'Unknown' };
+                }),
+                messages: [],
+                isGroup: action.payload.isGroup,
+                lastRead: {},
+            };
+            return { ...state, chats: [...state.chats, newChat] };
+        }
+
+        case 'RENAME_CHAT': {
+            return {
+                ...state,
+                chats: state.chats.map(c => c.id === action.payload.chatId ? { ...c, name: action.payload.newName } : c)
+            }
+        }
+
+        case 'SEND_MESSAGE': {
+            if (!state.currentUser) return state;
+            const newMessage: ChatMessage = {
+                id: `msg-${Date.now()}-${Math.random()}`,
+                senderId: state.currentUser.id,
+                text: action.payload.text,
+                timestamp: Date.now()
+            };
+            return {
+                ...state,
+                chats: state.chats.map(chat => chat.id === action.payload.chatId ? {
+                    ...chat,
+                    messages: [...chat.messages, newMessage],
+                    lastRead: { ...chat.lastRead, [state.currentUser!.id]: newMessage.timestamp }
+                } : chat)
+            };
+        }
+
+        case 'RECEIVE_MESSAGE': {
+            const { chatId, message } = action.payload;
+            const chatExists = state.chats.find(c => c.id === chatId);
+            if (chatExists && chatExists.messages.some(m => m.id === message.id)) {
+                return state;
+            }
+            return {
+                ...state,
+                chats: state.chats.map(chat => {
+                    if (chat.id === chatId) {
+                        return { ...chat, messages: [...chat.messages, message] };
+                    }
+                    return chat;
+                })
+            };
+        }
+
+        case 'MARK_AS_READ': {
+            if (!state.currentUser) return state;
+            return {
+                ...state,
+                chats: state.chats.map(chat => chat.id === action.payload.chatId ? {
+                    ...chat,
+                    lastRead: { ...chat.lastRead, [state.currentUser!.id]: Date.now() }
+                } : chat)
+            };
+        }
+        
+        default:
+            return state;
+    }
+};
+
+const AppContext = createContext<{
+  state: AppState;
+  dispatch: Dispatch<Action>;
+}>({
+  state: initialState,
+  dispatch: () => null,
+});
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [state, dispatch] = useReducer(appReducer, initialState);
+    
+    const latestState = useRef(state);
+    useEffect(() => {
+        latestState.current = state;
+    }, [state]);
+
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const reloadStateFromCloud = useCallback(async () => {
+        console.log("Real-time update received from Supabase! Reloading state...");
+        try {
+            const res = await fetch('/api/data');
+            if (!res.ok) {
+                const errorText = await res.text();
+                if (errorText.startsWith('<!DOCTYPE html')) {
+                     throw new Error(`API returned HTML. Check Vercel routing.`);
+                }
+                throw new Error(`Failed to fetch data: ${errorText}`);
+            };
+            const data = await res.json();
+            
+            if (!data.record) {
+                throw new Error("Invalid data from API: 'record' field is missing.");
+            }
+
+            const cloudState = data.record;
+            
+            dispatch({ type: 'SET_INITIAL_STATE', payload: { ...cloudState, isLoading: false } });
+
+        } catch (error) {
+            console.error("Failed to reload state for real-time update:", error);
+        }
+    }, []);
+
+    useEffect(() => {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            console.warn("Supabase keys are not defined. Real-time updates will be disabled.");
+            return;
+        }
+
+        let client: SupabaseClient | null = null;
+        let channel: RealtimeChannel | null = null;
+        try {
+            client = createClient(supabaseUrl, supabaseKey);
+            channel = client.channel('main-channel');
+
+            channel
+              .on(
+                'broadcast',
+                { event: 'state-updated' },
+                () => {
+                  reloadStateFromCloud();
+                }
+              )
+              .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') {
+                  console.log('Successfully subscribed to Supabase channel!');
+                }
+                if (status === 'CHANNEL_ERROR') {
+                  console.error('Supabase channel error:', err);
+                }
+              });
+            
+            return () => {
+              if (client && channel) {
+                client.removeChannel(channel);
+              }
+            };
+        } catch (error) {
+            console.error("Failed to initialize Supabase. Real-time will be disabled.", error);
+        }
+    }, [reloadStateFromCloud]);
+
+    const saveStateToCloud = useCallback(() => {
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
+        }
+        if (!latestState.current.currentUser) return;
+        
+        debounceTimer.current = setTimeout(() => {
+            const stateToSave = { ...latestState.current };
+            delete (stateToSave as Partial<AppState>).currentUser;
+            delete (stateToSave as Partial<AppState>).error;
+            delete (stateToSave as Partial<AppState>).isLoading;
+            delete (stateToSave as Partial<AppState>).users;
+            delete (stateToSave as Partial<AppState>).units;
+            delete (stateToSave as Partial<AppState>).onlineTests;
+
+            fetch('/api/data', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(stateToSave),
+            })
+            .catch(error => {
+                console.error("Failed to save state:", error);
+                dispatch({ type: 'SET_ERROR', payload: "Ошибка сохранения." });
+            });
+        }, 1500);
+    }, []);
+
+    useEffect(() => {
+        const loadStateFromCloud = async () => {
+            dispatch({ type: 'SET_LOADING', payload: true });
+            try {
+                const res = await fetch('/api/data');
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    if (errorText.startsWith('<!DOCTYPE html')) {
+                         throw new Error(`API /api/data returned HTML. Check Vercel routing.`);
+                    }
+                    throw new Error(`Failed to fetch initial data: ${errorText}`);
+                }
+                const data = await res.json();
+                
+                if (!data.record) {
+                    console.warn("Data from cloud is in unexpected format, initializing with defaults.");
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } }); 
+                    return;
+                }
+
+                const cloudState = data.record;
+                dispatch({ type: 'SET_INITIAL_STATE', payload: { ...cloudState, isLoading: false } });
+
+            } catch (error) {
+                console.error("CRITICAL: Failed to load state from cloud.", error);
+                dispatch({ type: 'SET_ERROR', payload: 'Не удалось загрузить данные. Проверьте конфигурацию сервера.' });
+                dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
+            }
+        };
+
+        loadStateFromCloud();
+    }, []);
+
+    useEffect(() => {
+        if (!state.isLoading && state.currentUser) {
+            saveStateToCloud();
+        }
+    }, [state.currentUser, state.isLoading, saveStateToCloud, state.studentProgress, state.offlineTestResults, state.onlineTestResults, state.teacherMessages, state.announcements, state.chats]);
+
+
+    return (
+        <AppContext.Provider value={{ state, dispatch }}>
+            {children}
+        </AppContext.Provider>
+    );
+};
+
+export const useAppContext = () => useContext(AppContext);
