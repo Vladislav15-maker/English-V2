@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement, OnlineTest } from '@/types';
+import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement, OnlineTest, OnlineTestResult } from '@/types';
 import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from '@/components/common/Icons';
 import SecureInput from '@/components/common/SecureInput';
 import Modal from '@/components/common/Modal';
@@ -390,7 +390,7 @@ const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => 
     const currentWord = test.words[currentWordIndex];
 
     if (isFinished) {
-        const studentResult = state.onlineTestResults[currentUser!.id]?.find((r: any) => r.testId === test.id);
+        const studentResult = state.onlineTestResults[currentUser!.id]?.find((r: OnlineTestResult) => r.testId === test.id);
         
         return (
             <div className="p-4 sm:p-6 lg:p-8 text-center animate-fade-in">
@@ -407,8 +407,8 @@ const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => 
                  <Modal isVisible={showReview} onClose={() => setShowReview(false)} title="Ваши ответы">
                      {studentResult && test && (
                         <ul className="space-y-3 max-h-80 overflow-y-auto bg-slate-50 p-4 rounded-lg">
-                            {test.words.map(word => {
-                                const answer = studentResult.answers.find((a: any) => a.wordId === word.id);
+                            {test.words.map((word: Word) => {
+                                const answer = studentResult.answers.find((a: StudentAnswer) => a.wordId === word.id);
                                 return (
                                     <li key={word.id} className="flex items-center justify-between p-3 bg-white rounded-md shadow-sm">
                                         <div className="flex flex-col text-left">
@@ -502,7 +502,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-white p-4 rounded-lg shadow">
                         {onlineResults.length > 0 ? (
                             <div className="space-y-2">
-                                {onlineResults.map((res: any) => {
+                                {onlineResults.map(res => {
                                     const test = onlineTests.find(t => t.id === res.testId);
                                     return (
                                         <div key={res.id} className="border-b last:border-b-0 p-3">
@@ -528,7 +528,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-white p-4 rounded-lg shadow">
                          {offlineResults.length > 0 ? (
                             <div className="space-y-2">
-                                {offlineResults.map((res: any) => (
+                                {offlineResults.map(res => (
                                     <div key={res.id} className="border-b last:border-b-0 p-3">
                                         <div className="flex justify-between items-center">
                                             <p className="font-semibold">{res.testName}</p>
@@ -818,7 +818,7 @@ const StudentView: React.FC = () => {
                 <h2 className="text-3xl font-bold mb-4">Комната ожидания</h2>
                 <p className="text-slate-500 mb-8">Ожидайте, пока учитель начнет тест. Вы видите себя в списке участников.</p>
                 <div className="max-w-md mx-auto">
-                    {activeOnlineTestSession && Object.values(activeOnlineTestSession.students).map((student: any) => (
+                    {activeOnlineTestSession && Object.values(activeOnlineTestSession.students).map((student: OnlineTestSessionStudent) => (
                         <div key={student.studentId} className="bg-white p-4 rounded-lg shadow-md flex items-center gap-4">
                             <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-xl">{student.name.charAt(0)}</div>
                             <span className="text-lg font-medium">{student.name}</span>
