@@ -390,7 +390,7 @@ const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => 
     const currentWord = test.words[currentWordIndex];
 
     if (isFinished) {
-        const studentResult = state.onlineTestResults[currentUser!.id]?.find(r => r.testId === test.id);
+        const studentResult = state.onlineTestResults[currentUser!.id]?.find((r: any) => r.testId === test.id);
         
         return (
             <div className="p-4 sm:p-6 lg:p-8 text-center animate-fade-in">
@@ -408,7 +408,7 @@ const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => 
                      {studentResult && test && (
                         <ul className="space-y-3 max-h-80 overflow-y-auto bg-slate-50 p-4 rounded-lg">
                             {test.words.map(word => {
-                                const answer = studentResult.answers.find(a => a.wordId === word.id);
+                                const answer = studentResult.answers.find((a: any) => a.wordId === word.id);
                                 return (
                                     <li key={word.id} className="flex items-center justify-between p-3 bg-white rounded-md shadow-sm">
                                         <div className="flex flex-col text-left">
@@ -502,7 +502,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-white p-4 rounded-lg shadow">
                         {onlineResults.length > 0 ? (
                             <div className="space-y-2">
-                                {onlineResults.map(res => {
+                                {onlineResults.map((res: any) => {
                                     const test = onlineTests.find(t => t.id === res.testId);
                                     return (
                                         <div key={res.id} className="border-b last:border-b-0 p-3">
@@ -528,7 +528,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-white p-4 rounded-lg shadow">
                          {offlineResults.length > 0 ? (
                             <div className="space-y-2">
-                                {offlineResults.map(res => (
+                                {offlineResults.map((res: any) => (
                                     <div key={res.id} className="border-b last:border-b-0 p-3">
                                         <div className="flex justify-between items-center">
                                             <p className="font-semibold">{res.testName}</p>
