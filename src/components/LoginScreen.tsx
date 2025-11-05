@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { LogoIcon } from './common/Icons';
+import { UserRole } from '../types'; // 👈 обязательно импортируем enum
 
 const LoginScreen: React.FC = () => {
   const { state, dispatch } = useAppContext();
@@ -12,16 +13,15 @@ const LoginScreen: React.FC = () => {
     e.preventDefault();
     if (isLoading) return;
 
-    // Отправляем успешный вход
     dispatch({
       type: 'LOGIN_SUCCESS',
       payload: {
         id: '1',
         name: login,
-        role: 'student',
+        role: UserRole.Student, // ✅ исправлено
       },
     });
-  }; // ← ЭТОЙ СКОБКИ НЕ ХВАТАЛО ❗
+  };
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4">
@@ -69,13 +69,9 @@ const LoginScreen: React.FC = () => {
                   disabled={isLoading}
                 />
               </div>
-
               {error && (
-                <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">
-                  {error}
-                </p>
+                <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-lg">{error}</p>
               )}
-
               <div>
                 <button
                   type="submit"
