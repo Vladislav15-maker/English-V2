@@ -1,6 +1,6 @@
 import type { AppProps } from 'next/app';
-import { AppProvider } from '@/context/AppContext'; // <-- Используем новый псевдоним @
-import '@/styles/globals.css';                 // <-- Используем новый псевдоним @
+import { AppProvider } from '@/context/AppContext'; // FIX: Используем псевдоним @
+import '@/styles/globals.css';                 // FIX: Используем псевдоним @
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (
