@@ -6,7 +6,6 @@ import autoprefixer from 'autoprefixer'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-
   return {
     plugins: [react()],
     define: {
@@ -21,11 +20,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-      },
-    },
-    server: {
-      proxy: {
-        '/api': 'http://localhost:3000',
       },
     },
   }
