@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import Pusher from 'pusher';
-import { ChatMessage } from '../../types'; // Убедитесь, что путь к типам верный
+import { ChatMessage } from '../../types'; // Убедитесь, что путь к типам правильный
 
-// Инициализация Pusher (как и в trigger-update.ts)
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID!,
   key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
@@ -27,8 +26,6 @@ export default async function handler(
       return res.status(400).json({ success: false, message: 'chatId and message are required' });
     }
 
-    // Отправляем новое, более конкретное событие 'new-message'
-    // Оно будет содержать ID чата и само сообщение
     await pusher.trigger('main-channel', 'new-message', {
       chatId,
       message,

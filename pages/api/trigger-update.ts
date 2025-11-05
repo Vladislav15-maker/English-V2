@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import Pusher from 'pusher';
 
-// Инициализируем Pusher с ключами из переменных окружения
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID!,
   key: process.env.NEXT_PUBLIC_PUSHER_KEY!,
@@ -16,8 +15,6 @@ export default async function handler(
 ) {
   if (req.method === 'POST') {
     try {
-      // Отправляем событие 'state-updated' в канал 'main-channel'
-      // Любой, кто слушает этот канал, получит этот сигнал.
       await pusher.trigger('main-channel', 'state-updated', {
         message: 'data has been updated'
       });
