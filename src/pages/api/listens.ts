@@ -1,10 +1,8 @@
 import { Redis } from '@upstash/redis';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-// Создаем ОДНОГО клиента Redis, который будет использоваться для всех подписок.
-// Upstash Redis спроектирован для обработки множества одновременных подключений через один инстанс.
-const redis = Redis.fromEnv();
-
+// Redis-клиент будет создаваться заново для каждого входящего запроса,
+// что является стандартной практикой в serverless-окружении.
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -16,24 +14,32 @@ export default async function handler(
   res.flushHeaders();
   console.log("Client connected to SSE.");
 
-  // Создаем дубликат клиента специально для подписки.
-  // Это хорошая практика, чтобы не блокировать основной клиент.
-  const subscriber = redis.duplicate();
+  // Создаем новый клиент Redis из переменных окружения
+  const redis = Redis.fromEnv();
 
-  // Используем `psubscribe`, который является стандартным для этой библиотеки.
-  // Он принимает имя канала и функцию-обработчик.
-  await subscriber.psubscribe('state-changes', (channel, message) => {
+  // Подписываемся на канал. `psubscribe` является асинхронным.
+  await redis.psubscribe('state-changes', (channel, message) => {
     console.log(`Received message '${message}' from channel '${channel}'`);
     if (message === 'updated') {
+      // Отправляем данные клиенту, когда приходит сообщение
       res.write(`data: ${message}\n\n`);
     }
   });
 
-  // Когда клиент отключается (закрывает вкладку), мы отписываемся и закрываем соединение.
+  // Устанавливаем таймер, чтобы соединение не закрывалось сразу
+  // (этот трюк часто необходим в serverless-среде)
+  const intervalId = setInterval(() => {
+    // Отправляем комментарий для поддержания соединения
+    res.write(': keep-alive\n\n');
+  }, 20000); // каждые 20 секунд
+
+  // Когда клиент отключается (закрывает вкладку), мы очищаем ресурсы
   req.on('close', () => {
-    console.log("Client disconnected from SSE. Unsubscribing and quitting.");
-    subscriber.punsubscribe('state-changes');
-    subscriber.quit();
+    console.log("Client disconnected from SSE. Cleaning up.");
+    clearInterval(intervalId);
+    // Отписываемся и закрываем соединение
+    redis.punsubscribe('state-changes');
+    redis.quit();
   });
 }
 
