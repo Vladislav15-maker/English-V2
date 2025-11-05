@@ -1,8 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App'; // <-- Теперь импортируем App.tsx
+import App from './App';
 import { AppProvider } from '@/context/AppContext';
-import '@/styles/globals.css';
+import '@/styles/globals.css'; // <-- Убедитесь, что эта строка правильная
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
