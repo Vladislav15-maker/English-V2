@@ -1,9 +1,8 @@
 import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback, useRef } from 'react';
 import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole, Announcement } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
-import { db, auth } from '../firebase';
-import { doc, setDoc, onSnapshot, getDoc } from "firebase/firestore";
-import { signInAnonymously, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+
+// --- НАЧАЛО БЛОКА: ИНТЕРФЕЙСЫ, REDUCER, INITIALSTATE ---
 
 // Интерфейс состояния
 interface AppState {
@@ -11,7 +10,6 @@ interface AppState {
   units: Unit[];
   onlineTests: OnlineTest[];
   currentUser: User | null;
-  firebaseUser: FirebaseUser | null;
   studentProgress: { [studentId: string]: { [unitId:string]: StudentUnitProgress } };
   offlineTestResults: { [studentId: string]: OfflineTestResult[] };
   onlineTestResults: {[studentId: string]: OnlineTestResult[]};
@@ -30,7 +28,6 @@ const initialState: AppState = {
   units: UNITS,
   onlineTests: ONLINE_TESTS,
   currentUser: null,
-  firebaseUser: null,
   studentProgress: {},
   offlineTestResults: {},
   onlineTestResults: {},
@@ -47,7 +44,6 @@ const initialState: AppState = {
 type Action =
   | { type: 'LOGIN_SUCCESS'; payload: User }
   | { type: 'LOGOUT' }
-  | { type: 'SET_FIREBASE_USER'; payload: FirebaseUser | null }
   | { type: 'SET_INITIAL_STATE'; payload: Partial<AppState> }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
@@ -94,8 +90,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
         case 'LOGOUT':
             return { ...state, currentUser: null };
-        case 'SET_FIREBASE_USER':
-            return { ...state, firebaseUser: action.payload };
         case 'SET_LOADING':
             return { ...state, isLoading: action.payload };
         case 'SET_INITIAL_STATE':
@@ -103,14 +97,11 @@ const appReducer = (state: AppState, action: Action): AppState => {
                 ...initialState,
                 ...action.payload,
                 currentUser: state.currentUser,
-                firebaseUser: state.firebaseUser,
                 isLoading: false 
             };
         case 'SET_ERROR':
             return { ...state, error: action.payload, isLoading: false };
         
-        // --- Вставьте сюда все остальные case вашего appReducer ---
-        // Пример:
         case 'SUBMIT_ROUND_TEST': {
             const { studentId, unitId, roundId, result } = action.payload;
             const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
@@ -119,68 +110,95 @@ const appReducer = (state: AppState, action: Action): AppState => {
             newProgress[studentId][unitId].rounds[roundId] = { ...result, roundId, completed: true };
             return { ...state, studentProgress: newProgress };
         }
-        // ... и так далее для всех остальных действий
+
+        // ... И все остальные case'ы, которые у вас есть
         
         default:
             return state;
     }
 };
 
+// --- КОНЕЦ БЛОКА ---
+
 const AppContext = createContext<{
   state: AppState;
   dispatch: Dispatch<Action>;
-} | undefined>(undefined); // Устанавливаем undefined по умолчанию
+} | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const isSaving = useRef(false);
-    const hasLoadedInitialData = useRef(false);
 
-    useEffect(() => {
-        dispatch({ type: 'SET_LOADING', payload: true });
-
-        const unsubAuth = onAuthStateChanged(auth, user => {
-            if (user) {
-                console.log("Firebase user is signed in with UID:", user.uid);
-                dispatch({ type: 'SET_FIREBASE_USER', payload: user });
-                
-                const docRef = doc(db, "appData", "state");
-                const unsubDb = onSnapshot(docRef, (docSnap) => {
-                    if (!hasLoadedInitialData.current) {
-                        console.log("Initial data loaded from Firestore.");
-                    } else {
-                        console.log("Real-time update from Firestore received!");
-                    }
-                    
-                    if (docSnap.exists()) {
-                        const cloudState = docSnap.data();
-                        dispatch({ type: 'SET_INITIAL_STATE', payload: { ...cloudState, isLoading: false } });
-                    } else {
-                        console.log("No data in Firestore, using initial state.");
-                        dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
-                    }
-                    hasLoadedInitialData.current = true;
-                }, (error) => {
-                    console.error("Firestore snapshot error:", error);
-                    dispatch({ type: 'SET_ERROR', payload: "Ошибка подключения к базе данных." });
-                });
-                return () => unsubDb();
-
-            } else {
-                console.log("No user signed in, signing in anonymously...");
-                signInAnonymously(auth).catch(error => {
-                    console.error("Anonymous sign-in error:", error);
-                    dispatch({ type: 'SET_ERROR', payload: "Ошибка анонимной аутентификации." });
-                });
+    const reloadStateFromCloud = useCallback(async () => {
+        console.log("Real-time update signal received from Upstash! Reloading state...");
+        try {
+            const res = await fetch('/api/data');
+            if (!res.ok) throw new Error("Failed to fetch data for real-time update");
+            const data = await res.json();
+            if (data.record) {
+                dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
             }
-        });
-
-        return () => unsubAuth();
+        } catch (error) {
+            console.error("Failed to reload state:", error);
+        }
     }, []);
 
+    // Подписка на Real-Time события
     useEffect(() => {
-        if (!hasLoadedInitialData.current || isSaving.current || state.isLoading || !state.firebaseUser) {
+        const eventSource = new EventSource('/api/listen');
+        console.log("Connecting to real-time event source...");
+
+        eventSource.onopen = () => {
+            console.log("EventSource connection opened.");
+        };
+
+        eventSource.onmessage = (event) => {
+            if (event.data === 'updated') {
+                reloadStateFromCloud();
+            }
+        };
+        
+        eventSource.onerror = (err) => {
+            console.error("EventSource failed:", err);
+            eventSource.close();
+        };
+
+        return () => {
+            console.log("Closing EventSource connection.");
+            eventSource.close();
+        };
+    }, [reloadStateFromCloud]);
+
+    // Начальная загрузка данных
+    useEffect(() => {
+        const loadInitialData = async () => {
+            dispatch({ type: 'SET_LOADING', payload: true });
+            try {
+                const res = await fetch('/api/data');
+                if (!res.ok) {
+                    // Если данных еще нет (404), это нормально, используем дефолтное состояние
+                    if (res.status === 404) {
+                        console.log("No data found on Upstash, using initial local state.");
+                        dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
+                        return;
+                    }
+                    throw new Error('Failed to load initial data');
+                }
+                const data = await res.json();
+                if (data.record) {
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
+                }
+            } catch (error) {
+                console.error("CRITICAL: Failed to load initial state.", error);
+                dispatch({ type: 'SET_ERROR', payload: 'Не удалось загрузить данные с сервера.' });
+            }
+        };
+        loadInitialData();
+    }, []);
+
+    // Сохранение данных при изменении
+    useEffect(() => {
+        if (state.isLoading || !state.currentUser) {
             return;
         }
 
@@ -189,25 +207,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         debounceTimer.current = setTimeout(() => {
-            isSaving.current = true;
-            console.log("Saving state to Firestore...");
             const stateToSave: Partial<AppState> = { ...state };
-
             delete stateToSave.currentUser;
-            delete stateToSave.firebaseUser;
             delete stateToSave.error;
             delete stateToSave.isLoading;
             delete stateToSave.users;
             delete stateToSave.units;
             delete stateToSave.onlineTests;
             
-            setDoc(doc(db, "appData", "state"), stateToSave, { merge: true })
-                .then(() => console.log("State successfully saved."))
-                .catch(error => console.error("Error saving state to Firestore:", error))
-                .finally(() => {
-                    setTimeout(() => { isSaving.current = false; }, 500);
-                });
-        }, 2000);
+            console.log("Saving state to Upstash via API...");
+            fetch('/api/data', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(stateToSave),
+            }).catch(error => {
+                console.error("Error saving state:", error);
+            });
+        }, 1500);
 
     }, [state]);
 
