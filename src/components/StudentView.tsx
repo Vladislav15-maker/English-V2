@@ -548,28 +548,17 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
     );
 }
-// --- УДАЛИ вот это ---
-// interface ChatParticipant { ... }
-// interface ChatMessage { ... }
-// interface Chat { ... }
-
 // --- Компонент ---
 const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { state, dispatch } = useAppContext();
     const { currentUser, users, chats, presence } = state;
 
-    const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-    const [newMessage, setNewMessage] = useState('');
-    const [showParticipantsModal, setShowParticipantsModal] = useState(false);
-    const [readReceiptsInfo, setReadReceiptsInfo] = useState<ChatMessage | null>(null);
-    const messagesEndRef = useRef<null | HTMLDivElement>(null);
-
     const userChats = useMemo(() =>
         chats
-            .filter((c: Chat) =>
+            .filter((c: any) =>
                 c.participants.some((p: any) => p.userId === currentUser?.id)
             )
-            .sort((a: Chat, b: Chat) => {
+            .sort((a: any, b: any) => {
                 const lastMsgA = a.messages[a.messages.length - 1]?.timestamp || 0;
                 const lastMsgB = b.messages[b.messages.length - 1]?.timestamp || 0;
                 return lastMsgB - lastMsgA;
@@ -577,45 +566,52 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         [chats, currentUser]
     );
 
-    const selectedChat = useMemo(
-        () => userChats.find((c: Chat) => c.id === selectedChatId),
-        [userChats, selectedChatId]
+    return (
+        <div className="p-4 space-y-4">
+            <button
+                onClick={onBack}
+                className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+                ← Назад
+            </button>
+
+            <h2 className="text-xl font-bold">Чаты</h2>
+
+            {userChats.length === 0 ? (
+                <p className="text-gray-400">Нет доступных чатов</p>
+            ) : (
+                <ul className="space-y-2">
+                    {userChats.map((chat: any) => (
+                        <li
+                            key={chat.id}
+                            className="p-3 border border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700"
+                            onClick={() => dispatch({ type: 'SELECT_CHAT', payload: chat.id })}
+                        >
+                            <div className="flex justify-between">
+                                <span className="font-semibold">
+                                    {chat.participants
+                                        .filter((p: any) => p.userId !== currentUser?.id)
+                                        .map((p: any) =>
+                                            users.find(u => u.id === p.userId)?.name || 'Неизвестный'
+                                        )
+                                        .join(', ')}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                    {chat.messages.length > 0
+                                        ? new Date(
+                                              chat.messages[chat.messages.length - 1].timestamp
+                                          ).toLocaleTimeString()
+                                        : '—'}
+                                </span>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
-
-    useEffect(() => {
-        if (selectedChatId) {
-            dispatch({ type: 'MARK_AS_READ', payload: { chatId: selectedChatId } });
-        }
-    }, [selectedChatId, dispatch, selectedChat?.messages.length]);
-
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [selectedChat?.messages]);
-
-    const handleSendMessage = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newMessage.trim() && selectedChatId) {
-            dispatch({
-                type: 'SEND_MESSAGE',
-                payload: { chatId: selectedChatId, text: newMessage },
-            });
-            setNewMessage('');
-        }
-    };
-
-    const getChatName = (chat: Chat) => {
-        if (chat.isGroup && chat.name) return chat.name;
-        if (chat.isGroup)
-            return chat.participants
-                .filter((p: any) => p.userId !== currentUser?.id)
-                .map((p: any) => p.name)
-                .join(', ');
-        const otherUser = chat.participants.find(
-            (p: any) => p.userId !== currentUser?.id
-        );
-        return otherUser?.name || 'Unknown User';
-    };
 };
+
 
     const getPresenceStatus = (userId: string) => {
         const status = presence[userId];
