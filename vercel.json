@@ -2,11 +2,6 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": {
-    "src/pages/api/**/*.ts": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
