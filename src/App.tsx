@@ -9,7 +9,6 @@ const App: React.FC = () => {
   const { state } = useAppContext();
 
   if (state.isLoading) {
-    // Вы можете добавить сюда красивый экран загрузки
     return (
         <div className="flex items-center justify-center min-h-screen bg-slate-50">
             <div className="w-full max-w-md p-8 text-center">
@@ -31,7 +30,6 @@ const App: React.FC = () => {
     return <StudentView />;
   }
 
-  // На случай, если у пользователя нет роли
   return <div>Ошибка: Роль пользователя не определена.</div>;
 };
 
