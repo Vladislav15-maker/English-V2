@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement, OnlineTest, OnlineTestResult } from '@/types';
+import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement, OnlineTest, OnlineTestResult, OfflineTestResult } from '@/types';
 import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from '@/components/common/Icons';
 import SecureInput from '@/components/common/SecureInput';
 import Modal from '@/components/common/Modal';
@@ -528,7 +528,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-white p-4 rounded-lg shadow">
                          {offlineResults.length > 0 ? (
                             <div className="space-y-2">
-                                {offlineResults.map(res => (
+                                {offlineResults.map((res: OfflineTestResult) => (
                                     <div key={res.id} className="border-b last:border-b-0 p-3">
                                         <div className="flex justify-between items-center">
                                             <p className="font-semibold">{res.testName}</p>
