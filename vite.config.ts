@@ -6,6 +6,7 @@ import autoprefixer from 'autoprefixer'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+
   return {
     plugins: [react()],
     define: {
@@ -28,36 +29,4 @@ export default defineConfig(({ mode }) => {
       },
     },
   }
-})```
-
-#### **3. `vercel.json` (Версия для Vite)**
-```json
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "src/pages/api/**/*.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/src/pages/api/$1"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
-}
+})
