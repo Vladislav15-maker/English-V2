@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement } from '../types';
+// FIX: Исправлена опечатка UserGroup-Icon на UserGroupIcon
 import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons';
 import SecureInput from './common/SecureInput';
 import Modal from './common/Modal';
@@ -751,7 +752,7 @@ const StudentView: React.FC = () => {
             return !lastRead || lastMessage.timestamp > lastRead;
         });
     }, [studentChats, currentUser]);
-    
+
     const lastActiveAnnouncement = useMemo(() => {
         if (!announcements) return null;
         return [...announcements].filter(a => a.type === 'active').pop();
