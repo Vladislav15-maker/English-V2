@@ -27,3 +27,14 @@
     "noEmit": true
   }
 }
+{
+  "compilerOptions": {
+    "baseUrl": "src", // <-- Эта строка очень важна!
+    "paths": {
+      "@/components/*": ["components/*"]
+    },
+    // ... другие ваши настройки
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
