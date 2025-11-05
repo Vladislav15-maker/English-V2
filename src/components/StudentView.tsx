@@ -329,7 +329,7 @@ const ResultsStage: React.FC<{ stageResults: { [key in StageType]?: StageResult 
 
 const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     const { state, dispatch } = useAppContext();
-const { currentUser, users, chats, presence, activeOnlineTestSession } = state;
+    const { currentUser, activeOnlineTestSession } = state;
     const test = state.onlineTests.find((t: OnlineTest) => t.id === activeOnlineTestSession?.testId);
     const [timeLeft, setTimeLeft] = useState(test ? test.durationMinutes * 60 : 0);
 
@@ -548,17 +548,19 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         </div>
     );
 }
-// --- Компонент ---
+
 const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const { state, dispatch } = useAppContext();
     const { currentUser, users, chats, presence } = state;
+    const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+    const [newMessage, setNewMessage] = useState('');
+    const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+    const [readReceiptsInfo, setReadReceiptsInfo] = useState<ChatMessage | null>(null);
+    const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
     const userChats = useMemo(() =>
-        chats
-            .filter((c: any) =>
-                c.participants.some((p: any) => p.userId === currentUser?.id)
-            )
-            .sort((a: any, b: any) => {
+        chats.filter((c: Chat) => c.participants.some(p => p.userId === currentUser?.id))
+            .sort((a: Chat, b: Chat) => {
                 const lastMsgA = a.messages[a.messages.length - 1]?.timestamp || 0;
                 const lastMsgB = b.messages[b.messages.length - 1]?.timestamp || 0;
                 return lastMsgB - lastMsgA;
@@ -566,67 +568,43 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         [chats, currentUser]
     );
 
-    return (
-        <div className="p-4 space-y-4">
-            <button
-                onClick={onBack}
-                className="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-600"
-            >
-                ← Назад
-            </button>
+    const selectedChat = useMemo(() => userChats.find(c => c.id === selectedChatId), [userChats, selectedChatId]);
 
-            <h2 className="text-xl font-bold">Чаты</h2>
+    useEffect(() => {
+        if (selectedChatId) {
+            dispatch({ type: 'MARK_AS_READ', payload: { chatId: selectedChatId } });
+        }
+    }, [selectedChatId, dispatch, selectedChat?.messages.length]);
 
-            {userChats.length === 0 ? (
-                <p className="text-gray-400">Нет доступных чатов</p>
-            ) : (
-                <ul className="space-y-2">
-                    {userChats.map((chat: any) => (
-                        <li
-                            key={chat.id}
-                            className="p-3 border border-gray-600 rounded-lg cursor-pointer hover:bg-gray-700"
-                            onClick={() => dispatch({ type: 'SELECT_CHAT', payload: chat.id })}
-                        >
-                            <div className="flex justify-between">
-                                <span className="font-semibold">
-                                    {chat.participants
-    .filter((p: any) => p.userId !== currentUser?.id)
-    .map((p: any) =>
-        users.find((u: any) => u.id === p.userId)?.name || 'Неизвестный'
-    )
-    .join(', ')}
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [selectedChat?.messages]);
 
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                    {chat.messages.length > 0
-                                        ? new Date(
-                                              chat.messages[chat.messages.length - 1].timestamp
-                                          ).toLocaleTimeString()
-                                        : '—'}
-                                </span>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
-};
+    const handleSendMessage = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newMessage.trim() && selectedChatId) {
+            dispatch({ type: 'SEND_MESSAGE', payload: { chatId: selectedChatId, text: newMessage } });
+            setNewMessage('');
+        }
+    };
 
-
+    const getChatName = (chat: Chat) => {
+        if (chat.isGroup && chat.name) return chat.name;
+        if (chat.isGroup) return chat.participants.filter(p => p.userId !== currentUser?.id).map(p => p.name).join(', ');
+        const otherUser = chat.participants.find(p => p.userId !== currentUser?.id);
+        return otherUser?.name || 'Unknown User';
+    };
+    
     const getPresenceStatus = (userId: string) => {
-    // Достаём presence из state
-    const { presence } = state; // <- здесь
-    const status = presence[userId];
-    if (status === 'online') return 'online';
-    if (typeof status === 'number') {
-        const minutesAgo = Math.round((Date.now() - status) / 60000);
-        if (minutesAgo < 1) return 'online';
-        return `был(а) ${minutesAgo} мин. назад`;
-    }
-    return 'offline';
-};
-
+        const status = presence[userId];
+        if (status === 'online') return 'online';
+        if (typeof status === 'number') {
+            const minutesAgo = Math.round((Date.now() - status) / 60000);
+            if (minutesAgo < 1) return 'online';
+            return `был(а) ${minutesAgo} мин. назад`;
+        }
+        return 'offline';
+    };
 
     const getOtherParticipantPresence = (chat: Chat) => {
         if(chat.isGroup) return null;
@@ -678,7 +656,7 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                          <h3 className="font-semibold text-lg text-slate-700 px-2">Чаты</h3>
                     </div>
                     <ul className="overflow-y-auto flex-grow">
-                        {userChats.map(chat => {
+                        {userChats.map((chat: Chat) => {
                             const lastMessage = chat.messages[chat.messages.length - 1];
                             const hasUnread = lastMessage && (!chat.lastRead[currentUser!.id] || chat.lastRead[currentUser!.id] < lastMessage.timestamp);
                             const otherParticipantPresence = getOtherParticipantPresence(chat);
@@ -763,9 +741,9 @@ const StudentView: React.FC = () => {
 
     const progress = studentProgress[currentUser!.id] || {};
 
-    const studentChats = useMemo(() => chats.filter(c => c.participants.some(p => p.userId === currentUser?.id)), [chats, currentUser]);
+    const studentChats = useMemo(() => chats.filter((c: Chat) => c.participants.some(p => p.userId === currentUser?.id)), [chats, currentUser]);
     const hasUnreadMessages = useMemo(() => {
-        return studentChats.some(chat => {
+        return studentChats.some((chat: Chat) => {
             if (chat.messages.length === 0) return false;
             const lastMessage = chat.messages[chat.messages.length - 1];
             const lastRead = chat.lastRead[currentUser!.id];
