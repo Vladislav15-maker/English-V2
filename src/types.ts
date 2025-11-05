@@ -180,3 +180,4 @@ export interface Announcement {
   type: 'active' | 'info';
   timestamp: number;
 }
+// ДОБАВЬТЕ ЭТОТ КОД В КОНЕЦ ВАШЕГО ФАЙЛА С ТИПАМИ

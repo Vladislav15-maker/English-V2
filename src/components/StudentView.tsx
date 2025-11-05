@@ -5,7 +5,7 @@ import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon,
 import SecureInput from '@/components/common/SecureInput';
 import Modal from '@/components/common/Modal';
 
-// ... (весь остальной код компонента, который я предоставлял ранее, должен быть здесь)
+// ... (остальной код файла без изменений) ...
 
 type Stage = 'learn' | 'write' | 'choice_text' | 'choice_image' | 'results';
 
