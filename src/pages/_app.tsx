@@ -1,6 +1,6 @@
 import type { AppProps } from 'next/app';
-import { AppProvider } from '@/context/AppContext'; // FIX: Используем псевдоним @
-import '@/styles/globals.css';                 // FIX: Используем псевдоним @
+import { AppProvider } from '@/context/AppContext';
+import '@/styles/globals.css';
 
 function MyApp({ Component, pageProps }: AppProps) {
   return (
@@ -9,5 +9,4 @@ function MyApp({ Component, pageProps }: AppProps) {
     </AppProvider>
   );
 }
-
 export default MyApp;
