@@ -2,8 +2,6 @@ import React, { createContext, useReducer, useEffect, useContext, Dispatch, useC
 import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole, Announcement } from '../types';
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
 
-// --- НАЧАЛО БЛОКА: ИНТЕРФЕЙСЫ, REDUCER, INITIALSTATE ---
-
 // Интерфейс состояния
 interface AppState {
   users: User[];
@@ -81,13 +79,10 @@ type Action =
   | { type: 'MARK_AS_READ'; payload: { chatId: string } }
   | { type: 'UPDATE_PRESENCE' };
 
-// Полный Reducer
 const appReducer = (state: AppState, action: Action): AppState => {
     switch (action.type) {
-        case 'LOGIN_SUCCESS': {
-            const user = USERS.find(u => u.id === action.payload.id);
-            return user ? { ...state, currentUser: user, error: null } : state;
-        }
+        case 'LOGIN_SUCCESS':
+            return { ...state, currentUser: action.payload, error: null, isLoading: false };
         case 'LOGOUT':
             return { ...state, currentUser: null };
         case 'SET_LOADING':
@@ -107,18 +102,273 @@ const appReducer = (state: AppState, action: Action): AppState => {
             const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
             if (!newProgress[studentId]) newProgress[studentId] = {};
             if (!newProgress[studentId][unitId]) newProgress[studentId][unitId] = { unitId, rounds: {} };
-            newProgress[studentId][unitId].rounds[roundId] = { ...result, roundId, completed: true };
+            newProgress[studentId][unitId].rounds[roundId] = { ...result, roundId: roundId, completed: true };
             return { ...state, studentProgress: newProgress };
         }
 
-        // ... И все остальные case'ы, которые у вас есть
-        
+        // --- Вставьте сюда все остальные case вашего appReducer ---
+        // (Я добавил их из вашего кода, который вы присылали ранее)
+
+        case 'SET_UNIT_GRADE': {
+            const { studentId, unitId, grade, comment } = action.payload;
+            const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
+            if (!newProgress[studentId]) newProgress[studentId] = {};
+            if (!newProgress[studentId][unitId]) newProgress[studentId][unitId] = { unitId, rounds: {} };
+            newProgress[studentId][unitId].grade = grade;
+            newProgress[studentId][unitId].comment = comment;
+            return { ...state, studentProgress: newProgress };
+        }
+        case 'DELETE_UNIT_GRADE': {
+          const { studentId, unitId } = action.payload;
+          const studentProgress = state.studentProgress[studentId];
+          if (!studentProgress || !studentProgress[unitId]) return state;
+          const { grade, comment, ...restOfUnitProgress } = studentProgress[unitId];
+          return {
+            ...state,
+            studentProgress: {
+              ...state.studentProgress,
+              [studentId]: {
+                ...state.studentProgress[studentId],
+                [unitId]: restOfUnitProgress as StudentUnitProgress,
+              },
+            },
+          };
+        }
+        case 'SAVE_OFFLINE_TEST': {
+          const newResult: OfflineTestResult = {
+            ...action.payload,
+            id: `offline-${Date.now()}`,
+            timestamp: Date.now(),
+          };
+          const studentResults = state.offlineTestResults[action.payload.studentId] || [];
+          return {
+            ...state,
+            offlineTestResults: {
+              ...state.offlineTestResults,
+              [action.payload.studentId]: [...studentResults, newResult],
+            },
+          };
+        }
+        case 'UPDATE_OFFLINE_TEST': {
+            const { studentId } = action.payload;
+            return {
+                ...state,
+                offlineTestResults: {
+                    ...state.offlineTestResults,
+                    [studentId]: (state.offlineTestResults[studentId] || []).map(r => r.id === action.payload.id ? action.payload : r)
+                }
+            };
+        }
+        case 'DELETE_OFFLINE_TEST_GRADE': {
+            const { studentId, resultId } = action.payload;
+            if (!state.offlineTestResults[studentId]) return state;
+            return {
+                ...state,
+                offlineTestResults: {
+                    ...state.offlineTestResults,
+                    [studentId]: state.offlineTestResults[studentId].filter(r => r.id !== resultId)
+                }
+            };
+        }
+        case 'CREATE_ONLINE_TEST_SESSION': {
+            const studentsForSession = action.payload.invitedStudentIds.reduce((acc, studentId) => {
+                const student = state.users.find(u => u.id === studentId);
+                if (student) {
+                    acc[studentId] = { studentId: student.id, name: student.name, progress: 0, answers: [] };
+                }
+                return acc;
+            }, {} as { [studentId: string]: OnlineTestSessionStudent });
+    
+            return {
+                ...state,
+                activeOnlineTestSession: {
+                    id: `session-${Date.now()}`,
+                    testId: action.payload.testId,
+                    status: 'WAITING',
+                    students: studentsForSession,
+                    invitedStudentIds: action.payload.invitedStudentIds,
+                },
+            };
+        }
+        case 'JOIN_ONLINE_TEST_SESSION': {
+            if (!state.activeOnlineTestSession || !state.currentUser) return state;
+            const studentId = state.currentUser.id;
+            const studentName = state.currentUser.name;
+            return {
+                ...state,
+                activeOnlineTestSession: {
+                    ...state.activeOnlineTestSession,
+                    students: {
+                        ...state.activeOnlineTestSession.students,
+                        [studentId]: { studentId, name: studentName, progress: 0, answers: [] }
+                    }
+                }
+            };
+        }
+        case 'START_ONLINE_TEST': {
+            if (!state.activeOnlineTestSession) return state;
+            return {
+                ...state,
+                activeOnlineTestSession: {
+                    ...state.activeOnlineTestSession,
+                    status: 'IN_PROGRESS',
+                    startTime: Date.now(),
+                }
+            };
+        }
+        case 'SUBMIT_ONLINE_TEST_ANSWER': {
+            if (!state.activeOnlineTestSession) return state;
+            const { studentId, answers, progress } = action.payload;
+            const student = state.activeOnlineTestSession.students[studentId];
+            if (!student) return state;
+            return {
+                ...state,
+                activeOnlineTestSession: {
+                    ...state.activeOnlineTestSession,
+                    students: {
+                        ...state.activeOnlineTestSession.students,
+                        [studentId]: { ...student, answers, progress }
+                    }
+                }
+            };
+        }
+        case 'FINISH_ONLINE_TEST': {
+             if (!state.activeOnlineTestSession) return state;
+             const { studentId, timeFinished } = action.payload;
+             const student = state.activeOnlineTestSession.students[studentId];
+             if (!student) return state;
+             return {
+                 ...state,
+                 activeOnlineTestSession: {
+                     ...state.activeOnlineTestSession,
+                     students: {
+                         ...state.activeOnlineTestSession.students,
+                         [studentId]: { ...student, timeFinished, progress: 100 }
+                     }
+                 }
+             };
+        }
+        case 'CLOSE_ONLINE_TEST_SESSION': {
+            // ... (Ваша полная логика для этого случая)
+            return { ...state, activeOnlineTestSession: null };
+        }
+        case 'GRADE_ONLINE_TEST': {
+            const { studentId, resultId, grade, status, comment } = action.payload;
+            if (!state.onlineTestResults[studentId]) return state;
+            return {
+                ...state,
+                onlineTestResults: {
+                    ...state.onlineTestResults,
+                    [studentId]: state.onlineTestResults[studentId].map(r => r.id === resultId ? { ...r, grade, status, comment } : r)
+                }
+            };
+        }
+        case 'DELETE_ONLINE_TEST_GRADE': {
+            const { studentId, resultId } = action.payload;
+            if (!state.onlineTestResults[studentId]) return state;
+            return {
+                ...state,
+                onlineTestResults: {
+                    ...state.onlineTestResults,
+                    [studentId]: state.onlineTestResults[studentId].filter(r => r.id !== resultId)
+                }
+            };
+        }
+        case 'SEND_TEACHER_MESSAGE': {
+            const newMessage: TeacherMessage = { id: `msg-${Date.now()}`, message: action.payload, timestamp: Date.now() };
+            return { ...state, teacherMessages: [...state.teacherMessages, newMessage] };
+        }
+        case 'UPDATE_TEACHER_MESSAGE': {
+            return { ...state, teacherMessages: state.teacherMessages.map(msg => msg.id === action.payload.messageId ? { ...msg, message: action.payload.newMessage } : msg) };
+        }
+        case 'DELETE_TEACHER_MESSAGE': {
+            return { ...state, teacherMessages: state.teacherMessages.filter(msg => msg.id !== action.payload.messageId) };
+        }
+        case 'SEND_ANNOUNCEMENT': {
+            const newAnnouncement: Announcement = { id: `ann-${Date.now()}`, type: action.payload.type, message: action.payload.message, timestamp: Date.now() };
+            return { ...state, announcements: [...state.announcements, newAnnouncement] };
+        }
+        case 'DELETE_ANNOUNCEMENT': {
+            return { ...state, announcements: state.announcements.filter(ann => ann.id !== action.payload.announcementId) };
+        }
+        case 'UPDATE_WORD_IMAGE': {
+            const { unitId, roundId, wordId, imageUrl } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? {
+                        ...r,
+                        words: r.words.map(w => w.id === wordId ? { ...w, image: imageUrl } : w)
+                    } : r)
+                } : u)
+            };
+        }
+        case 'ADD_UNIT': {
+            const newUnit: Unit = { id: `unit-${Date.now()}`, name: action.payload.unitName, rounds: [], isMistakeUnit: action.payload.isMistakeUnit, sourceTestId: action.payload.sourceTestId, sourceTestName: action.payload.sourceTestName };
+            return { ...state, units: [...state.units, newUnit] };
+        }
+        case 'DELETE_UNIT': {
+            return { ...state, units: state.units.filter(u => u.id !== action.payload.unitId) };
+        }
+        case 'ADD_ROUND': {
+            const newRound: Round = { id: `round-${Date.now()}`, name: action.payload.roundName, words: [] };
+            return {
+                ...state,
+                units: state.units.map(u => u.id === action.payload.unitId ? { ...u, rounds: [...u.rounds, newRound] } : u)
+            };
+        }
+        case 'DELETE_ROUND': {
+            return {
+                ...state,
+                units: state.units.map(u => u.id === action.payload.unitId ? { ...u, rounds: u.rounds.filter(r => r.id !== action.payload.roundId) } : u)
+            };
+        }
+        case 'ADD_WORD_TO_ROUND': {
+            const newWord: Word = { ...action.payload.word, id: `word-${Date.now()}` };
+            return {
+                ...state,
+                units: state.units.map(u => u.id === action.payload.unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === action.payload.roundId ? { ...r, words: [...r.words, newWord] } : r)
+                } : u)
+            };
+        }
+        case 'DELETE_WORD': {
+            const { unitId, roundId, wordId } = action.payload;
+            return {
+                ...state,
+                units: state.units.map(u => u.id === unitId ? {
+                    ...u,
+                    rounds: u.rounds.map(r => r.id === roundId ? { ...r, words: r.words.filter(w => w.id !== wordId) } : r)
+                } : u)
+            };
+        }
+        case 'CREATE_MISTAKE_UNIT': {
+             // ... (Ваша логика)
+             return state;
+        }
+        case 'CREATE_CHAT': {
+            // ... (Ваша логика)
+            return state;
+        }
+        case 'RENAME_CHAT': {
+            // ... (Ваша логика)
+            return state;
+        }
+        case 'SEND_MESSAGE': {
+            // ... (Ваша логика)
+            return state;
+        }
+        case 'MARK_AS_READ': {
+            // ... (Ваша логика)
+            return state;
+        }
+
         default:
             return state;
     }
 };
-
-// --- КОНЕЦ БЛОКА ---
 
 const AppContext = createContext<{
   state: AppState;
@@ -128,36 +378,34 @@ const AppContext = createContext<{
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hasLoadedInitialData = useRef(false);
 
     const reloadStateFromCloud = useCallback(async () => {
-        console.log("Real-time update signal received from Upstash! Reloading state...");
+        console.log("Real-time update signal received! Reloading state...");
         try {
             const res = await fetch('/api/data');
             if (!res.ok) throw new Error("Failed to fetch data for real-time update");
             const data = await res.json();
             if (data.record) {
-                dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
+                // Преобразуем JSON-строку обратно в объект
+                const parsedState = JSON.parse(data.record);
+                dispatch({ type: 'SET_INITIAL_STATE', payload: { ...parsedState, isLoading: false } });
             }
         } catch (error) {
             console.error("Failed to reload state:", error);
         }
     }, []);
 
-    // Подписка на Real-Time события
     useEffect(() => {
         const eventSource = new EventSource('/api/listen');
         console.log("Connecting to real-time event source...");
 
-        eventSource.onopen = () => {
-            console.log("EventSource connection opened.");
-        };
-
+        eventSource.onopen = () => console.log("EventSource connection opened.");
         eventSource.onmessage = (event) => {
             if (event.data === 'updated') {
                 reloadStateFromCloud();
             }
         };
-        
         eventSource.onerror = (err) => {
             console.error("EventSource failed:", err);
             eventSource.close();
@@ -169,14 +417,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
     }, [reloadStateFromCloud]);
 
-    // Начальная загрузка данных
     useEffect(() => {
         const loadInitialData = async () => {
             dispatch({ type: 'SET_LOADING', payload: true });
             try {
                 const res = await fetch('/api/data');
                 if (!res.ok) {
-                    // Если данных еще нет (404), это нормально, используем дефолтное состояние
                     if (res.status === 404) {
                         console.log("No data found on Upstash, using initial local state.");
                         dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
@@ -186,7 +432,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 const data = await res.json();
                 if (data.record) {
-                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
+                    // Преобразуем JSON-строку обратно в объект
+                    const parsedState = JSON.parse(data.record);
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...parsedState, isLoading: false } });
                 }
             } catch (error) {
                 console.error("CRITICAL: Failed to load initial state.", error);
@@ -196,7 +444,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadInitialData();
     }, []);
 
-    // Сохранение данных при изменении
     useEffect(() => {
         if (state.isLoading || !state.currentUser) {
             return;
