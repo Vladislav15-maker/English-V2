@@ -16,4 +16,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // ЭТОТ БЛОК ВАЖЕН
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000', // Предполагая, что Vercel CLI запускает функции на порту 3000
+        changeOrigin: true,
+      },
+    },
+  },
 })
