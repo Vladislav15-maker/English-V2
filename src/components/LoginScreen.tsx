@@ -12,8 +12,14 @@ const LoginScreen: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
-    dispatch({ type: 'LOGIN_SUCCESS', payload: { login, password } });
-  };
+    dispatch({
+  type: 'LOGIN_SUCCESS',
+  payload: {
+    id: '1',
+    name: login,
+    role: 'student',
+  },
+});
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4">
