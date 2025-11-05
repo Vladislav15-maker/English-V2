@@ -3,10 +3,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { User, UserRole, TestStatus, OnlineTestSession, OnlineTest, StudentUnitProgress, StudentRoundResult, OnlineTestSessionStudent, OfflineTestResult, Unit, Word, Round, TeacherMessage, StageType, StageResult, OnlineTestResult, Chat, ChatMessage } from '../types';
 import Modal from './common/Modal';
-import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon } from './common/Icons';
+import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, DocumentTextIcon, MegaphoneIcon, EyeIcon, ClipboardDocumentListIcon, PencilIcon, BookOpenIcon, TrashIcon, PlusIcon, UploadIcon, ArchiveBoxIcon, PlusCircleIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, UserGroupIcon, CheckIcon, ChevronLeftIcon, InformationCircleIcon, ExclamationTriangleIcon } from './common/Icons'; // FIX: Added new icons
 
 type TeacherViewMode = 'dashboard' | 'student_detail' | 'offline_grader' | 'online_test_manager' | 'online_test_monitor' | 'online_test_history' | 'online_test_results' | 'content_editor' | 'chat';
 
+// ... (Components WordItemEditor, AddWordForm, AnswerReviewModal, ChatInterface are unchanged)
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
@@ -469,7 +470,7 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 const TeacherView: React.FC = () => {
     // ... (rest of the component is unchanged)
     const { state, dispatch } = useAppContext();
-    const { currentUser, users, studentProgress, offlineTestResults, activeOnlineTestSession, onlineTests, onlineTestResults } = state;
+    const { currentUser, users, studentProgress, offlineTestResults, activeOnlineTestSession, onlineTests, onlineTestResults, announcements } = state;
     const [view, setView] = useState<TeacherViewMode>('dashboard');
     const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
     const [editingTest, setEditingTest] = useState<OfflineTestResult | null>(null);
@@ -494,6 +495,11 @@ const TeacherView: React.FC = () => {
     const [showMessageHistory, setShowMessageHistory] = useState(false);
     const [editingMessage, setEditingMessage] = useState<TeacherMessage | null>(null);
     const [editedMessageText, setEditedMessageText] = useState('');
+    
+    // FIX: State for new announcement system
+    const [activeReminderText, setActiveReminderText] = useState(announcements?.active || '');
+    const [generalInfoText, setGeneralInfoText] = useState(announcements?.info || '');
+
 
     const [reviewingRoundResult, setReviewingRoundResult] = useState<StudentRoundResult | null>(null);
     const [gradeInput, setGradeInput] = useState<{ [id: string]: string }>({});
@@ -562,7 +568,8 @@ const TeacherView: React.FC = () => {
     const handleStartOnlineTest = () => {
         if (!selectedOnlineTest || selectedStudentsForTest.length === 0) return;
         dispatch({ type: 'CREATE_ONLINE_TEST_SESSION', payload: { testId: selectedOnlineTest.id, invitedStudentIds: selectedStudentsForTest } });
-        setView('online_test_monitor');
+        // FIX: Removed setView('online_test_monitor'). The useEffect below will handle this automatically when the state updates.
+        // This prevents the redirect-to-dashboard bug.
     };
     
     const handleSendMessage = () => {
@@ -571,9 +578,25 @@ const TeacherView: React.FC = () => {
         setMessage('');
     };
 
-    const handleToggleReminder = (isActive: boolean) => {
-        dispatch({ type: 'TOGGLE_TEST_REMINDER', payload: isActive });
+    // FIX: Handlers for the new announcement system
+    const handleSaveAnnouncement = (type: 'active' | 'info') => {
+        const payload = {
+            active: type === 'active' ? activeReminderText : announcements?.active,
+            info: type === 'info' ? generalInfoText : announcements?.info,
+        };
+        dispatch({ type: 'SET_ANNOUNCEMENT', payload });
     };
+
+    const handleClearAnnouncement = (type: 'active' | 'info') => {
+        if (type === 'active') setActiveReminderText('');
+        if (type === 'info') setGeneralInfoText('');
+        const payload = {
+            active: type === 'active' ? null : announcements?.active,
+            info: type === 'info' ? null : announcements?.info,
+        };
+        dispatch({ type: 'SET_ANNOUNCEMENT', payload });
+    };
+
 
     const handleEditMessage = (msg: TeacherMessage) => {
         setEditingMessage(msg);
@@ -688,23 +711,51 @@ const TeacherView: React.FC = () => {
                     </tbody>
                 </table>
             </div>
+            
+            {/* FIX: New Announcement System */}
+            <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg">
+                <h3 className="text-lg font-bold flex items-center gap-2 mb-4"><MegaphoneIcon className="w-6 h-6 text-indigo-500"/> Центр объявлений для учеников</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Active Reminder */}
+                    <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                         <label className="font-bold text-red-800 flex items-center gap-2"><ExclamationTriangleIcon className="w-5 h-5"/> Активное напоминание (красный блок)</label>
+                         <textarea 
+                            value={activeReminderText} 
+                            onChange={(e) => setActiveReminderText(e.target.value)} 
+                            placeholder="Например: Не забудьте подготовиться к тесту в пятницу!" 
+                            className="w-full p-2 border rounded-lg mt-2 h-24"
+                        ></textarea>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={() => handleSaveAnnouncement('active')} className="bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-red-600">Сохранить</button>
+                            <button onClick={() => handleClearAnnouncement('active')} className="bg-slate-400 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-slate-500">Очистить</button>
+                        </div>
+                    </div>
+                     {/* General Info */}
+                    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                         <label className="font-bold text-blue-800 flex items-center gap-2"><InformationCircleIcon className="w-5 h-5"/> Общее объявление (синий блок)</label>
+                         <textarea 
+                            value={generalInfoText} 
+                            onChange={(e) => setGeneralInfoText(e.target.value)} 
+                            placeholder="Например: Внимание, на следующей неделе занятия начнутся в 10:00." 
+                            className="w-full p-2 border rounded-lg mt-2 h-24"
+                        ></textarea>
+                        <div className="flex gap-2 mt-2">
+                            <button onClick={() => handleSaveAnnouncement('info')} className="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-600">Сохранить</button>
+                            <button onClick={() => handleClearAnnouncement('info')} className="bg-slate-400 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-slate-500">Очистить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg">
                 <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-lg font-bold flex items-center gap-2"><MegaphoneIcon className="w-6 h-6 text-indigo-500"/> Центр уведомлений</h3>
+                    <h3 className="text-lg font-bold flex items-center gap-2"><MegaphoneIcon className="w-6 h-6 text-slate-500"/> Личные сообщения (с колокольчиком)</h3>
                     <button onClick={() => setShowMessageHistory(true)} className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-800">
                         <ArchiveBoxIcon className="w-5 h-5" /> История сообщений
                     </button>
                 </div>
                 <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Написать сообщение всем ученикам..." className="w-full p-2 border rounded-lg mb-2"></textarea>
-                <div className="flex justify-between items-center">
-                    <button onClick={handleSendMessage} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Отправить</button>
-                    <div className="flex items-center gap-4">
-                        <label className="font-medium">Напомнить о тесте:</label>
-                        <button onClick={() => handleToggleReminder(true)} className={`px-4 py-2 rounded-lg ${state.isTestReminderActive ? 'bg-red-500 text-white' : 'bg-slate-200'}`}>Вкл</button>
-                        <button onClick={() => handleToggleReminder(false)} className={`px-4 py-2 rounded-lg ${!state.isTestReminderActive ? 'bg-green-500 text-white' : 'bg-slate-200'}`}>Выкл</button>
-                    </div>
-                </div>
+                 <button onClick={handleSendMessage} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">Отправить</button>
             </div>
 
             <Modal isVisible={showMessageHistory} onClose={() => setShowMessageHistory(false)} title="История сообщений">
@@ -744,6 +795,7 @@ const TeacherView: React.FC = () => {
         if (!selectedStudent) return null;
         const studentId = selectedStudent.id;
         const progress = studentProgress[studentId] || {};
+        const studentOfflineTests = offlineTestResults[studentId] || []; // FIX: Get student's offline tests
         
         const handleSetGrade = (unitId: string) => {
             const grade = parseInt(gradeInput[unitId]);
@@ -770,6 +822,34 @@ const TeacherView: React.FC = () => {
                         roundResult={reviewingRoundResult} 
                         onClose={() => setReviewingRoundResult(null)} 
                     />
+                )}
+                {/* FIX: Modal for editing an offline test */}
+                {editingTest && (
+                     <Modal isVisible={true} onClose={() => setEditingTest(null)} title={`Редактировать: ${editingTest.testName}`}>
+                         <form onSubmit={handleUpdateOfflineTest} className="space-y-4">
+                             <div>
+                                <label className="font-semibold">Оценка</label>
+                                <select name="grade" defaultValue={editingTest.grade} className="w-full p-2 border rounded mt-1">
+                                    <option>5</option><option>4</option><option>3</option><option>2</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="font-semibold">Статус</label>
+                                <select name="status" defaultValue={editingTest.status} className="w-full p-2 border rounded mt-1">
+                                    <option value={TestStatus.Passed}>Прошёл</option>
+                                    <option value={TestStatus.Failed}>Не прошёл</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="font-semibold">Комментарий</label>
+                                <textarea name="comment" defaultValue={editingTest.comment} className="w-full p-2 border rounded mt-1"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <button type="button" onClick={() => setEditingTest(null)} className="px-4 py-2 rounded bg-slate-200">Отмена</button>
+                                <button type="submit" className="px-4 py-2 rounded bg-indigo-600 text-white">Сохранить</button>
+                            </div>
+                         </form>
+                     </Modal>
                 )}
                 <button onClick={() => setView('dashboard')} className="mb-4 text-indigo-600">← Назад к списку</button>
                 <h2 className="text-2xl font-bold mb-4">Детализация: {selectedStudent.name}</h2>
@@ -831,6 +911,38 @@ const TeacherView: React.FC = () => {
                             </div>
                         )
                     })}
+                </div>
+
+                {/* FIX: Offline Test History section */}
+                <h3 className="text-xl font-semibold mb-2 mt-8">История офлайн-тестов</h3>
+                <div className="bg-white p-4 rounded-lg shadow">
+                    {studentOfflineTests.length > 0 ? (
+                         <div className="space-y-4">
+                            {studentOfflineTests.map(test => (
+                                <div key={test.id} className="p-3 border-b last:border-b-0">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold">{test.testName}</p>
+                                            <p className={`text-sm font-semibold ${test.status === TestStatus.Passed ? 'text-green-600' : 'text-red-600'}`}>
+                                                Оценка: {test.grade} - {test.status === TestStatus.Passed ? 'Прошёл' : 'Не прошёл'}
+                                            </p>
+                                            {test.comment && <p className="text-sm text-slate-600 mt-1 pl-2 border-l-2"><b>Комментарий:</b> {test.comment}</p>}
+                                        </div>
+                                        <div className="flex gap-3">
+                                            <button onClick={() => setEditingTest(test)} className="text-blue-500 hover:text-blue-700">
+                                                <PencilIcon className="w-5 h-5"/>
+                                            </button>
+                                            <button onClick={() => handleDeleteOfflineTestGrade(studentId, test.id)} className="text-red-500 hover:text-red-700">
+                                                <TrashIcon className="w-5 h-5"/>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-slate-500">У этого ученика еще нет оценок за офлайн-тесты.</p>
+                    )}
                 </div>
             </div>
         );
