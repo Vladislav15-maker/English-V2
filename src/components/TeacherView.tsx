@@ -6,8 +6,6 @@ import { CheckCircleIcon, XCircleIcon, ClockIcon, UsersIcon, ChartBarIcon, Docum
 
 type TeacherViewMode = 'dashboard' | 'student_detail' | 'offline_grader' | 'online_test_manager' | 'online_test_monitor' | 'online_test_history' | 'online_test_results' | 'content_editor' | 'chat';
 
-// ... (остальной код файла без изменений) ...
-
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
     const [isUploading, setIsUploading] = useState(false);
@@ -323,6 +321,7 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </Modal>
         )
     }
+
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 animate-fade-in flex flex-col h-[calc(100vh-128px)]">

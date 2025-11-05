@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement } from '@/types';
+import { Unit, Round, Word, TestStatus, OnlineTestSessionStudent, StudentRoundResult, StudentUnitProgress, StageType, StageAnswer, StageResult, StudentAnswer, Chat, User, ChatMessage, Announcement, OnlineTest } from '@/types';
 import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon, BellIcon, ArrowRightIcon, AcademicCapIcon, ChartBarIcon, ChatBubbleLeftRightIcon, PaperAirplaneIcon, EyeIcon, UserGroupIcon, CheckIcon, PencilIcon, InformationCircleIcon, ExclamationTriangleIcon } from '@/components/common/Icons';
 import SecureInput from '@/components/common/SecureInput';
 import Modal from '@/components/common/Modal';
@@ -330,7 +330,8 @@ const ResultsStage: React.FC<{ stageResults: { [key in StageType]?: StageResult 
 const OnlineTestSession: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
     const { state, dispatch } = useAppContext();
     const { currentUser, activeOnlineTestSession } = state;
-    const test = state.onlineTests.find(t => t.id === activeOnlineTestSession?.testId);
+    // FIX: Явно указываем тип параметра 't', чтобы исправить ошибку TypeScript
+    const test = state.onlineTests.find((t: OnlineTest) => t.id === activeOnlineTestSession?.testId);
     const [timeLeft, setTimeLeft] = useState(test ? test.durationMinutes * 60 : 0);
 
     const [currentWordIndex, setCurrentWordIndex] = useState(0);
