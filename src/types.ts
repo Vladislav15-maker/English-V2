@@ -165,3 +165,11 @@ export interface Announcement {
   type: 'active' | 'info';
   timestamp: number;
 }
+// ... (все ваши существующие типы)
+
+export interface Announcement {
+  id: string;
+  message: string;
+  type: 'active' | 'info';
+  timestamp: number;
+}
