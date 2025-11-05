@@ -1,6 +1,29 @@
 {
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/src/pages/api/:path*" },
-    { "source": "/:path*", "destination": "/index.html" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/pages/api/**/*.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/src/pages/api/$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
   ]
 }

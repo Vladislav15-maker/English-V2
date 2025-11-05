@@ -3,8 +3,7 @@ import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineT
 import { USERS, UNITS, ONLINE_TESTS } from '../constants';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
-// --- НАЧАЛО БЛОКА, КОТОРЫЙ БЫЛ ПРОПУЩЕН ---
-
+// Интерфейс состояния
 interface AppState {
   users: User[];
   units: Unit[];
@@ -22,6 +21,7 @@ interface AppState {
   isLoading: boolean;
 }
 
+// Начальное состояние
 const initialState: AppState = {
   users: USERS,
   units: UNITS,
@@ -39,6 +39,7 @@ const initialState: AppState = {
   isLoading: true,
 };
 
+// Типы действий
 type Action =
   | { type: 'LOGIN'; payload: { login: string; password: string } }
   | { type: 'LOGOUT' }
@@ -416,7 +417,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
         }
 
         case 'SEND_MESSAGE': {
-            // Этот case теперь только обновляет локальное состояние. Отправка вынесена наружу.
             if (!state.currentUser) return state;
             const newMessage: ChatMessage = {
                 id: `msg-${Date.now()}-${Math.random()}`,
@@ -467,8 +467,6 @@ const appReducer = (state: AppState, action: Action): AppState => {
     }
 };
 
-// --- КОНЕЦ БЛОКА, КОТОРЫЙ БЫЛ ПРОПУЩЕН ---
-
 const AppContext = createContext<{
   state: AppState;
   dispatch: Dispatch<Action>;
@@ -493,16 +491,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const res = await fetch('/api/data');
             if (!res.ok) {
                 const errorText = await res.text();
-                // Если API вернул HTML, мы получим SyntaxError, это нормально, если API не работает
                 if (errorText.startsWith('<!DOCTYPE html')) {
-                     throw new Error(`API returned HTML instead of JSON. Check Vercel routing.`);
+                     throw new Error(`API returned HTML. Check Vercel routing.`);
                 }
                 throw new Error(`Failed to fetch data: ${errorText}`);
             };
             const data = await res.json();
             
             if (!data.record) {
-                throw new Error("Invalid data format received from API: 'record' field is missing.");
+                throw new Error("Invalid data from API: 'record' field is missing.");
             }
 
             const cloudState = data.record;
@@ -511,7 +508,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         } catch (error) {
             console.error("Failed to reload state for real-time update:", error);
-            // Не показываем ошибку пользователю, просто логируем, чтобы не мешать
         }
     }, []);
 
@@ -592,7 +588,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (!res.ok) {
                     const errorText = await res.text();
                     if (errorText.startsWith('<!DOCTYPE html')) {
-                         throw new Error(`API /api/data returned HTML instead of JSON. Check Vercel routing and vercel.json file.`);
+                         throw new Error(`API /api/data returned HTML. Check Vercel routing.`);
                     }
                     throw new Error(`Failed to fetch initial data: ${errorText}`);
                 }
@@ -600,7 +596,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 
                 if (!data.record) {
                     console.warn("Data from cloud is in unexpected format, initializing with defaults.");
-                    dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } }); // Загружаем дефолтное состояние
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } }); 
                     return;
                 }
 
@@ -610,7 +606,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (error) {
                 console.error("CRITICAL: Failed to load state from cloud.", error);
                 dispatch({ type: 'SET_ERROR', payload: 'Не удалось загрузить данные. Проверьте конфигурацию сервера.' });
-                // В случае критической ошибки, загружаем только локальные константы
                 dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
             }
         };
@@ -620,9 +615,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     useEffect(() => {
         if (!state.isLoading && state.currentUser) {
+            // Запускаем сохранение при изменении любых данных, которые нужно синхронизировать
             saveStateToCloud();
         }
     }, [state.currentUser, state.isLoading, saveStateToCloud, state.studentProgress, state.offlineTestResults, state.onlineTestResults, state.teacherMessages, state.announcements, state.chats]);
+
 
     return (
         <AppContext.Provider value={{ state, dispatch }}>
