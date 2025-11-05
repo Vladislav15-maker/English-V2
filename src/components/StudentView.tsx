@@ -481,7 +481,7 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div>
                     <h3 className="text-xl font-bold mb-3">Оценки за юниты</h3>
                     <div className="bg-white p-4 rounded-lg shadow space-y-2">
-                        {units.filter((u: Unit) => !u.isMistakeUnit && progress[u.id] && typeof progress[u.id].grade !== 'undefined').length > 0 ? units.filter((u: Unit) => !u.isMistakeUnit).map(unit => {
+                        {units.filter((u: Unit) => !u.isMistakeUnit && progress[u.id] && typeof progress[u.id].grade !== 'undefined').length > 0 ? units.filter((u: Unit) => !u.isMistakeUnit).map((unit: Unit) => {
                             const unitProgress = progress[unit.id];
                             if (!unitProgress || typeof unitProgress.grade === 'undefined') return null;
                             return (
@@ -502,8 +502,8 @@ const GradesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <div className="bg-white p-4 rounded-lg shadow">
                         {onlineResults.length > 0 ? (
                             <div className="space-y-2">
-                                {onlineResults.map(res => {
-                                    const test = onlineTests.find(t => t.id === res.testId);
+                                {onlineResults.map((res: OnlineTestResult) => {
+                                    const test = onlineTests.find((t: OnlineTest) => t.id === res.testId);
                                     return (
                                         <div key={res.id} className="border-b last:border-b-0 p-3">
                                             <p className="font-semibold">{test?.name}</p>
@@ -907,7 +907,7 @@ const StudentView: React.FC = () => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {allUnitsToDisplay.map(unit => {
+                {allUnitsToDisplay.map((unit: Unit) => {
                     const unitProgress = progress[unit.id];
                     const completedRoundsResults = unitProgress ? (Object.values(unitProgress.rounds) as StudentRoundResult[]).filter(r => r.completed) : [];
                     const totalScore = completedRoundsResults.reduce((acc: number, r) => acc + r.overallScore, 0);
