@@ -10,7 +10,9 @@ type TeacherViewMode =
   | 'tests'
   | 'results'
   | 'announcements'
-  | 'messages';
+  | 'messages'
+  | 'online_test_history';
+
 
 const WordItemEditor: React.FC<{ word: Word; unitId: string; roundId: string, onConfirm: (message: string, onConfirm: () => void) => void }> = ({ word, unitId, roundId, onConfirm }) => {
     const { dispatch } = useAppContext();
