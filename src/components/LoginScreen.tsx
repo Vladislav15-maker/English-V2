@@ -12,7 +12,7 @@ const LoginScreen: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
-    dispatch({ type: 'LOGIN', payload: { login, password } });
+    dispatch({ type: 'LOGIN_SUCCESS', payload: { login, password } });
   };
 
   return (
