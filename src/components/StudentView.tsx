@@ -615,18 +615,18 @@ const ChatInterface: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
 
     const getPresenceStatus = (userId: string) => {
-        const status = presence[userId];
-        if (status === 'online') return 'online';
-        if (typeof status === 'number') {
-            const minutesAgo = Math.round((Date.now() - status) / 60000);
-            if (minutesAgo < 1) return 'только что';
-            if (minutesAgo < 60) return `${minutesAgo}м назад`;
-            const hoursAgo = Math.floor(minutesAgo / 60);
-            if (hoursAgo < 24) return `${hoursAgo}ч назад`;
-            return `давно`;
-        }
-        return 'оффлайн';
-    };
+    // Достаём presence из state
+    const { presence } = state; // <- здесь
+    const status = presence[userId];
+    if (status === 'online') return 'online';
+    if (typeof status === 'number') {
+        const minutesAgo = Math.round((Date.now() - status) / 60000);
+        if (minutesAgo < 1) return 'online';
+        return `был(а) ${minutesAgo} мин. назад`;
+    }
+    return 'offline';
+};
+
 
     const getOtherParticipantPresence = (chat: Chat) => {
         if(chat.isGroup) return null;
