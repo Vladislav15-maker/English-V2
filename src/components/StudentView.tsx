@@ -5,6 +5,8 @@ import { ChevronLeftIcon, VolumeUpIcon, CheckCircleIcon, XCircleIcon, ClockIcon,
 import SecureInput from '@/components/common/SecureInput';
 import Modal from '@/components/common/Modal';
 
+// ... (весь остальной код компонента)
+
 type Stage = 'learn' | 'write' | 'choice_text' | 'choice_image' | 'results';
 
 const RoundFlow: React.FC<{ unit: Unit; round: Round; onBack: () => void }> = ({ unit, round, onBack }) => {
