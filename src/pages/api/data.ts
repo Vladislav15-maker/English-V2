@@ -1,6 +1,7 @@
 import { Redis } from '@upstash/redis';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+// Redis.fromEnv() автоматически читает переменные окружения Vercel
 const redis = Redis.fromEnv();
 
 export default async function handler(
@@ -9,30 +10,24 @@ export default async function handler(
 ) {
   if (req.method === 'PUT') {
     try {
-      // Сохраняем все состояние в один ключ 'app-state'
-      await redis.set('app-state', JSON.stringify(req.body));
-      
-      // Публикуем событие в канал 'state-changes'
+      await redis.set('app-state', req.body); // Сохраняем как строку
       await redis.publish('state-changes', 'updated');
-
       return res.status(200).json({ message: 'Data saved' });
     } catch (error) {
-      console.error("Upstash PUT error:", error);
       return res.status(500).json({ error: 'Failed to save data' });
     }
   } 
   
   else if (req.method === 'GET') {
     try {
-      // Получаем все состояние из ключа 'app-state'
       const data = await redis.get('app-state');
       if (data) {
-        return res.status(200).json({ record: data }); // Оборачиваем в `record`, как ожидает AppContext
+        // Оборачиваем в `record`, как ожидает AppContext
+        return res.status(200).json({ record: data });
       } else {
         return res.status(404).json({ error: 'No data found' });
       }
     } catch (error) {
-      console.error("Upstash GET error:", error);
       return res.status(500).json({ error: 'Failed to get data' });
     }
   } 
