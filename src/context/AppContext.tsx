@@ -1,6 +1,6 @@
 import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback, useRef } from 'react';
-import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole, Announcement } from '../types';
-import { USERS, UNITS, ONLINE_TESTS } from '../constants';
+import { User, Unit, StudentUnitProgress, OfflineTestResult, OnlineTest, OnlineTestSession, TeacherMessage, OnlineTestResult, StudentAnswer, Round, Word, TestStatus, StudentRoundResult, Chat, ChatMessage, UserRole, Announcement } from './types';
+import { USERS, UNITS, ONLINE_TESTS } from './constants';
 
 // Интерфейс состояния
 interface AppState {
@@ -75,9 +75,7 @@ type Action =
   | { type: 'CREATE_CHAT'; payload: { participantIds: string[], isGroup: boolean } }
   | { type: 'RENAME_CHAT'; payload: { chatId: string, newName: string } }
   | { type: 'SEND_MESSAGE'; payload: { chatId: string, text: string } }
-  | { type: 'RECEIVE_MESSAGE'; payload: { chatId: string, message: ChatMessage } }
-  | { type: 'MARK_AS_READ'; payload: { chatId: string } }
-  | { type: 'UPDATE_PRESENCE' };
+  | { type: 'MARK_AS_READ'; payload: { chatId: string } };
 
 // Полный Reducer
 const appReducer = (state: AppState, action: Action): AppState => {
@@ -90,17 +88,14 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, isLoading: action.payload };
         case 'SET_INITIAL_STATE':
             return { 
-                ...initialState,
-                ...action.payload,
-                currentUser: state.currentUser,
+                ...initialState, // Сбрасываем до начального состояния, чтобы очистить старые данные
+                ...action.payload, // Применяем свежие данные из облака
+                currentUser: state.currentUser, // Восстанавливаем текущего пользователя
                 isLoading: false 
             };
         case 'SET_ERROR':
             return { ...state, error: action.payload, isLoading: false };
         
-        // --- Вставьте сюда все остальные case из вашего appReducer ---
-        // (Я добавил их из вашего кода, который вы присылали ранее)
-
         case 'SUBMIT_ROUND_TEST': {
             const { studentId, unitId, roundId, result } = action.payload;
             const newProgress = JSON.parse(JSON.stringify(state.studentProgress));
@@ -110,6 +105,8 @@ const appReducer = (state: AppState, action: Action): AppState => {
             return { ...state, studentProgress: newProgress };
         }
         
+        // ... (вставьте сюда остальные ваши case'ы, если они есть)
+
         default:
             return state;
     }
@@ -123,44 +120,48 @@ const AppContext = createContext<{
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastUpdateTime = useRef<number | null>(null);
 
-    const reloadStateFromCloud = useCallback(async () => {
-        console.log("Real-time update signal received! Reloading state...");
+    // Функция для проверки обновлений
+    const checkForUpdates = useCallback(async () => {
         try {
-            const res = await fetch('/api/data');
-            if (!res.ok) throw new Error("Failed to fetch data for real-time update");
-            const data = await res.json();
-            if (data.record) {
-                // Преобразуем JSON-строку обратно в объект
-                const parsedState = JSON.parse(data.record);
-                dispatch({ type: 'SET_INITIAL_STATE', payload: { ...parsedState, isLoading: false } });
+            // HEAD запрос легковесный, он не скачивает все тело ответа
+            const res = await fetch('/api/data', { method: 'HEAD', cache: 'no-store' }); 
+            if (!res.ok) return;
+
+            const lastModifiedHeader = res.headers.get('Last-Modified');
+            const newUpdateTime = lastModifiedHeader ? new Date(lastModifiedHeader).getTime() : null;
+
+            if (newUpdateTime && newUpdateTime > (lastUpdateTime.current || 0)) {
+                console.log("New data version detected on server! Reloading...");
+                
+                // Если нашли обновления, делаем полный GET-запрос
+                const dataRes = await fetch('/api/data');
+                if (!dataRes.ok) return;
+
+                const data = await dataRes.json();
+                if (data.record) {
+                    lastUpdateTime.current = newUpdateTime; // Обновляем время только после успешной загрузки
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record } });
+                }
             }
         } catch (error) {
-            console.error("Failed to reload state:", error);
+            console.error("Failed to check for updates:", error);
         }
     }, []);
 
+    // Запускаем периодическую проверку обновлений
     useEffect(() => {
-        const eventSource = new EventSource('/api/listen');
-        console.log("Connecting to real-time event source...");
+        if (!state.currentUser) return; // Не проверяем, если пользователь не вошел
 
-        eventSource.onopen = () => console.log("EventSource connection opened.");
-        eventSource.onmessage = (event) => {
-            if (event.data === 'updated') {
-                reloadStateFromCloud();
-            }
-        };
-        eventSource.onerror = (err) => {
-            console.error("EventSource failed:", err);
-            eventSource.close();
-        };
+        const intervalId = setInterval(() => {
+            checkForUpdates();
+        }, 7000); // каждые 7 секунд
 
-        return () => {
-            console.log("Closing EventSource connection.");
-            eventSource.close();
-        };
-    }, [reloadStateFromCloud]);
+        return () => clearInterval(intervalId);
+    }, [checkForUpdates, state.currentUser]);
 
+    // Начальная загрузка данных
     useEffect(() => {
         const loadInitialData = async () => {
             dispatch({ type: 'SET_LOADING', payload: true });
@@ -172,13 +173,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
                         return;
                     }
-                    throw new Error('Failed to load initial data');
+                    throw new Error(`Failed to load initial data. Status: ${res.status}`);
                 }
                 const data = await res.json();
                 if (data.record) {
-                    // Преобразуем JSON-строку обратно в объект
-                    const parsedState = JSON.parse(data.record);
-                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...parsedState, isLoading: false } });
+                    const lastModified = res.headers.get('Last-Modified');
+                    lastUpdateTime.current = lastModified ? new Date(lastModified).getTime() : Date.now();
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
+                } else {
+                    throw new Error("Invalid data format from API");
                 }
             } catch (error) {
                 console.error("CRITICAL: Failed to load initial state.", error);
@@ -188,14 +191,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loadInitialData();
     }, []);
     
+    // Сохранение данных при изменении
     useEffect(() => {
         if (state.isLoading || !state.currentUser) {
             return;
         }
-
-        if (debounceTimer.current) {
-            clearTimeout(debounceTimer.current);
-        }
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
         debounceTimer.current = setTimeout(() => {
             const stateToSave: Partial<AppState> = { ...state };
@@ -211,9 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(stateToSave),
-            }).catch(error => {
-                console.error("Error saving state:", error);
-            });
+            }).catch(error => console.error("Error saving state:", error));
         }, 1500);
 
     }, [state]);

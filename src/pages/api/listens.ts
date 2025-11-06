@@ -1,44 +1,106 @@
-import { Redis } from '@upstash/redis';
-import type { NextApiRequest, NextApiResponse } from 'next';
+import React, { createContext, useReducer, useEffect, useContext, Dispatch, useCallback, useRef } from 'react';
+import { AppState, Action, User } from '@/types'; // ИСПРАВЛЕНО
+import { USERS, UNITS, ONLINE_TESTS } from '@/constants'; // ИСПРАВЛЕНО
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
+// --- Вставьте сюда ваши полные интерфейсы AppState, initialState, Action и appReducer ---
+// (Убедитесь, что они здесь есть)
 
-  const subscriber = Redis.fromEnv();
+const AppContext = createContext<{
+  state: AppState;
+  dispatch: Dispatch<Action>;
+} | undefined>(undefined);
 
-  // Keep-alive каждые 20 секунд
-  const intervalId = setInterval(() => {
-    res.write(': keep-alive\n\n');
-  }, 20000);
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [state, dispatch] = useReducer(appReducer, initialState);
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastUpdateTime = useRef<number | null>(null);
 
-  try {
-    // Асинхронный итератор для подписки на канал
-    for await (const message of subscriber.psubscribe('state-changes')) {
-      // message приходит как объект { channel, data }
-      if (message.data === 'updated') {
-        res.write(`data: ${message.data}\n\n`);
-      }
+    const reloadStateFromCloud = useCallback(async () => {
+        try {
+            const res = await fetch('/api/data', { cache: 'no-store' }); // Добавляем no-store для надежности
+            const lastModified = res.headers.get('Last-Modified');
+            const newUpdateTime = lastModified ? new Date(lastModified).getTime() : null;
+
+            if (newUpdateTime && newUpdateTime !== lastUpdateTime.current) {
+                console.log("New version on server detected! Reloading state...");
+                lastUpdateTime.current = newUpdateTime;
+                
+                const data = await res.json();
+                if (data.record) {
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
+                }
+            }
+        } catch (error) {
+            console.error("Failed to check for updates:", error);
+        }
+    }, []);
+
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            if (state.currentUser) {
+                checkForUpdates();
+            }
+        }, 7000); // Увеличим интервал до 7 секунд
+
+        return () => clearInterval(intervalId);
+    }, [checkForUpdates, state.currentUser]);
+
+    useEffect(() => {
+        const loadInitialData = async () => {
+            dispatch({ type: 'SET_LOADING', payload: true });
+            try {
+                const res = await fetch('/api/data');
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        dispatch({ type: 'SET_INITIAL_STATE', payload: { isLoading: false } });
+                        return;
+                    }
+                    throw new Error('Failed to load initial data');
+                }
+                const data = await res.json();
+                if (data.record) {
+                    const lastModified = res.headers.get('Last-Modified');
+                    lastUpdateTime.current = lastModified ? new Date(lastModified).getTime() : Date.now();
+                    dispatch({ type: 'SET_INITIAL_STATE', payload: { ...data.record, isLoading: false } });
+                }
+            } catch (error) {
+                console.error("CRITICAL: Failed to load initial state.", error);
+                dispatch({ type: 'SET_ERROR', payload: 'Не удалось загрузить данные с сервера.' });
+            }
+        };
+        loadInitialData();
+    }, []);
+    
+    useEffect(() => {
+        if (state.isLoading || !state.currentUser) {
+            return;
+        }
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+        debounceTimer.current = setTimeout(() => {
+            const stateToSave: Partial<AppState> = { ...state };
+            // ... (удаление ненужных полей)
+
+            fetch('/api/data', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(stateToSave),
+            }).catch(error => console.error("Error saving state:", error));
+        }, 1500);
+
+    }, [state]);
+
+    return (
+        <AppContext.Provider value={{ state, dispatch }}>
+            {children}
+        </AppContext.Provider>
+    );
+};
+
+export const useAppContext = () => {
+    const context = useContext(AppContext);
+    if (context === undefined) {
+        throw new Error('useAppContext must be used within an AppProvider');
     }
-  } catch (error) {
-    console.error("SSE listener error:", error);
-  }
-
-  req.on('close', () => {
-    clearInterval(intervalId);
-    subscriber.unsubscribe('state-changes').catch(console.error);
-    subscriber.quit().catch(console.error);
-  });
-}
-
-export const config = {
-  api: {
-    bodyParser: false,
-    externalResolver: true,
-  },
+    return context;
 };
